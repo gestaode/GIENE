@@ -61,6 +61,7 @@
     "express-session": "^1.18.1",
     "ffmpeg-static": "^5.2.0",
     "framer-motion": "^11.13.1",
+    "ibm-watson": "^10.0.0",
     "input-otp": "^1.2.4",
     "lucide-react": "^0.485.0",
     "memorystore": "^1.6.7",
