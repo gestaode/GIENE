@@ -455,18 +455,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Theme is required" });
       }
       
-      const openaiService = initializeService(req, 'openai') as OpenAIService;
+      let generatedScript;
+      try {
+        const openaiService = initializeService(req, 'openai') as OpenAIService;
+        generatedScript = await openaiService.generateVideoScript({
+          theme,
+          targetAudience,
+          duration,
+          tone,
+          keywords,
+          additionalInstructions
+        });
+      } catch (openaiError) {
+        console.warn("OpenAI failed, falling back to Gemini:", openaiError);
+        const geminiService = initializeService(req, 'gemini') as GeminiService;
+        generatedScript = await geminiService.generateVideoScript({
+          theme,
+          targetAudience,
+          duration,
+          tone,
+          keywords,
+          additionalInstructions
+        });
+      }
       
-      const script = await openaiService.generateVideoScript({
-        theme,
-        targetAudience,
-        duration,
-        tone,
-        keywords,
-        additionalInstructions
-      });
-      
-      res.status(200).json(script);
+      res.status(200).json(generatedScript);
     } catch (error) {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
     }
