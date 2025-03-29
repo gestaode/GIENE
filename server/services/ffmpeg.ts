@@ -39,10 +39,18 @@ interface ImageToVideoOptions {
   imagePaths: string[];
   outputFileName: string;
   duration?: number;
-  transition?: string;
+  transition?: 'fade' | 'wipe' | 'slide' | 'zoom' | 'radial' | 'none'; // Mais opções de transição
   transitionDuration?: number;
   width?: number;
   height?: number;
+  textOverlay?: string; // Texto para sobrepor às imagens
+  textPosition?: 'top' | 'center' | 'bottom'; // Posição do texto
+  textColor?: string; // Cor do texto
+  logo?: string; // Caminho para logotipo a ser exibido
+  fps?: number; // Taxa de quadros por segundo
+  audioPath?: string; // Caminho para áudio a ser adicionado diretamente
+  zoomEffect?: boolean; // Aplicar efeito Ken Burns (zoom suave)
+  colorGrading?: 'vibrant' | 'moody' | 'warm' | 'cool' | 'none'; // Ajustes de cor
 }
 
 interface CombineVideosOptions {
@@ -61,7 +69,7 @@ interface VideoMetadata {
 
 export class FFmpegService {
   /**
-   * Create video from a series of images
+   * Create video from a series of images com efeitos avançados para maior engajamento e conversão
    */
   async createVideoFromImages(options: ImageToVideoOptions): Promise<string> {
     const {
@@ -72,6 +80,14 @@ export class FFmpegService {
       transitionDuration = 0.5,
       width = 1080,
       height = 1920,
+      textOverlay,
+      textPosition = 'bottom',
+      textColor = 'white',
+      logo,
+      fps = 30,
+      zoomEffect = true,
+      colorGrading = 'vibrant',
+      audioPath
     } = options;
 
     if (imagePaths.length === 0) {
@@ -80,6 +96,7 @@ export class FFmpegService {
 
     try {
       const outputPath = path.join(OUTPUT_DIR, outputFileName);
+      const tempVideoPath = path.join(TEMP_DIR, `temp_${Date.now()}.mp4`);
       
       // Create a temporary file for the list of images
       const listFile = path.join(TEMP_DIR, `list_${Date.now()}.txt`);
@@ -95,20 +112,116 @@ export class FFmpegService {
       // Write the list file
       fs.writeFileSync(listFile, listContent);
       
-      // Execute FFmpeg command
+      // Construir filtros de vídeo complexos
+      let filters = [];
+      
+      // Escala básica
+      let scaleFilter = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`;
+      
+      // Adiciona efeito Ken Burns (zoom suave) se solicitado
+      if (zoomEffect) {
+        scaleFilter += `,zoompan=z='min(zoom+0.0015,1.5)':d=${fps*duration}:s=${width}x${height}`;
+      }
+      
+      // Adiciona o filtro de transição com base no tipo selecionado
+      let transitionFilter = "";
+      switch (transition) {
+        case 'wipe':
+          transitionFilter = `xfade=transition=wipeleft:duration=${transitionDuration}`;
+          break;
+        case 'slide':
+          transitionFilter = `xfade=transition=slideright:duration=${transitionDuration}`;
+          break;
+        case 'zoom':
+          transitionFilter = `xfade=transition=zoomin:duration=${transitionDuration}`;
+          break;
+        case 'radial':
+          transitionFilter = `xfade=transition=circleclose:duration=${transitionDuration}`;
+          break;
+        case 'fade':
+        default:
+          transitionFilter = `xfade=transition=fade:duration=${transitionDuration}`;
+          break;
+      }
+      
+      // Adiciona efeitos de cor com base no colorGrading selecionado
+      let colorFilter = "";
+      switch (colorGrading) {
+        case 'vibrant':
+          colorFilter = "eq=saturation=1.3:contrast=1.1:brightness=1.05";
+          break;
+        case 'moody':
+          colorFilter = "eq=saturation=0.85:contrast=1.2:brightness=0.95";
+          break;
+        case 'warm':
+          colorFilter = "eq=saturation=1.1:gamma_r=1.1:gamma_b=0.9";
+          break;
+        case 'cool':
+          colorFilter = "eq=saturation=1.1:gamma_b=1.1:gamma_r=0.9";
+          break;
+        case 'none':
+        default:
+          colorFilter = "";
+          break;
+      }
+      
+      // Combina os filtros
+      filters.push(scaleFilter);
+      if (colorFilter) filters.push(colorFilter);
+      
+      // Adiciona texto se fornecido
+      if (textOverlay) {
+        let yPos = "(h-text_h-25)"; // posição inferior
+        if (textPosition === 'top') yPos = "25";
+        else if (textPosition === 'center') yPos = "(h-text_h)/2";
+        
+        // Texto com sombra e fundo
+        filters.push(`drawtext=text='${textOverlay.replace(/'/g, "'\\\\''")}':fontsize=48:fontcolor=${textColor}:x=(w-text_w)/2:y=${yPos}:shadowcolor=black@0.5:shadowx=2:shadowy=2:box=1:boxcolor=black@0.4:boxborderw=10`);
+      }
+      
+      // Adiciona logo se fornecido
+      if (logo) {
+        // Aplica o logo no canto superior direito
+        filters.push(`movie=${logo}[watermark];[v][watermark]overlay=W-w-10:10`);
+      }
+      
+      // Finaliza com fade in/out
+      filters.push("fade=in:0:30,fade=out:st=" + (imagePaths.length * duration - 1) + ":d=1");
+      
+      // Execute FFmpeg command com configurações de alta qualidade
       const ffmpegArgs = [
         "-f", "concat",
         "-safe", "0",
         "-i", listFile,
-        "-vf", `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
+        "-filter_complex", filters.join(","),
         "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "23",
-        "-movflags", "+faststart",
-        "-y", outputPath
+        "-preset", "slow", // Usa 'slow' em vez de 'medium' para melhor qualidade
+        "-crf", "18", // Valor menor = melhor qualidade (18 é considerado visualmente sem perdas)
+        "-profile:v", "high", // Utiliza o profile High para melhor compressão
+        "-level", "4.2", // Compatível com a maioria dos dispositivos modernos
+        "-bf", "2", // Número de B-frames
+        "-r", fps.toString(), // Define a taxa de quadros
+        "-movflags", "+faststart", // Permite que o vídeo comece a reproduzir antes de ser totalmente baixado
+        "-pix_fmt", "yuv420p", // Formato de pixel para compatibilidade
+        "-y", audioPath ? tempVideoPath : outputPath
       ];
       
       await this.executeFFmpegCommand(ffmpegArgs);
+      
+      // Se um áudio foi fornecido, adiciona-o ao vídeo
+      if (audioPath) {
+        await this.addAudioToVideo({
+          videoPath: tempVideoPath,
+          audioPath,
+          outputFileName,
+          loop: true
+        });
+        
+        // Remove o arquivo temporário
+        if (fs.existsSync(tempVideoPath)) {
+          fs.unlinkSync(tempVideoPath);
+        }
+      }
       
       // Clean up the list file
       fs.unlinkSync(listFile);
@@ -137,20 +250,27 @@ export class FFmpegService {
       // Get video duration
       const videoMetadata = await this.getVideoMetadata(videoPath);
       
-      // Execute FFmpeg command
+      // Execute FFmpeg command com alta qualidade de áudio
       const ffmpegArgs = [
         "-i", videoPath,
         "-i", audioPath,
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-map", "0:v:0",
-        "-map", "1:a:0",
+        "-c:v", "copy", // Mantém o vídeo inalterado
+        "-c:a", "aac", // Codec de áudio AAC (boa qualidade e compatibilidade)
+        "-b:a", "192k", // Bitrate de áudio aumentado para 192kbps (qualidade superior)
+        "-ar", "48000", // Taxa de amostragem de 48kHz (padrão para vídeo profissional)
+        "-af", "dynaudnorm=f=150:g=15", // Normalização dinâmica de áudio para nivelamento
+        "-map", "0:v:0", // Pega a primeira stream de vídeo
+        "-map", "1:a:0", // Pega a primeira stream de áudio
       ];
       
-      // If loop is true, loop the audio to match the video duration
+      // Se loop for true, atualizamos os filtros de áudio para incluir também o loop
       if (loop) {
+        // Removemos o filtro dynaudnorm anterior (índice 11 e 12 no array)
+        ffmpegArgs.splice(11, 2);
+        
+        // Adicionamos um filtro combinado
         ffmpegArgs.push(
-          "-af", `aloop=loop=-1:size=2e+09,atrim=duration=${videoMetadata.duration}`
+          "-af", `aloop=loop=-1:size=2e+09,atrim=duration=${videoMetadata.duration},dynaudnorm=f=150:g=15`
         );
       }
       
@@ -198,16 +318,23 @@ export class FFmpegService {
       // Write the list file
       fs.writeFileSync(listFile, listContent);
       
-      // Execute FFmpeg command
+      // Execute FFmpeg command com alta qualidade
       const ffmpegArgs = [
         "-f", "concat",
         "-safe", "0",
         "-i", listFile,
         "-c:v", "libx264",
-        "-c:a", "aac",
-        "-preset", "medium",
-        "-crf", "23",
-        "-movflags", "+faststart",
+        "-preset", "slow", // Usa 'slow' em vez de 'medium' para melhor qualidade
+        "-crf", "18", // Valor menor = melhor qualidade (18 é considerado visualmente sem perdas)
+        "-profile:v", "high", // Utiliza o profile High para melhor compressão
+        "-level", "4.2", // Compatível com a maioria dos dispositivos modernos
+        "-bf", "2", // Número de B-frames
+        "-c:a", "aac", // Codec de áudio AAC
+        "-b:a", "192k", // Bitrate de áudio aumentado
+        "-ar", "48000", // Taxa de amostragem de áudio
+        "-af", "dynaudnorm=f=150:g=15", // Normalização dinâmica de áudio
+        "-movflags", "+faststart", // Permite reprodução enquanto carrega
+        "-pix_fmt", "yuv420p", // Formato de pixel para compatibilidade
         "-y", outputPath
       ];
       
@@ -238,18 +365,41 @@ export class FFmpegService {
     try {
       const outputPath = path.join(OUTPUT_DIR, outputFileName);
       
-      // Execute FFmpeg command
+      // Cria um degradê de fundo gradiente em vez de cor sólida
+      const gradientColor = "0x1A1A2Eff-0x4361EEff";
+      
+      // Execute FFmpeg command com efeitos avançados para maior engajamento
       const ffmpegArgs = [
         "-f", "lavfi",
-        "-i", "color=c=black:s=1080x1920:d=10",
-        "-vf", `drawtext=text='${text.replace(/'/g, "'\\\\''")}':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2:fontfile=/System/Library/Fonts/Helvetica.ttc`,
+        // Fundo gradiente em vez de cor sólida
+        "-i", `gradients=s=${width}x${height}:c1=${gradientColor}:d=10`,
+        // Filtros de vídeo avançados: texto com fontes de alta qualidade, sombra, animações
+        "-vf", `
+          drawtext=text='${text.replace(/'/g, "'\\\\''")}':
+          fontcolor=white:
+          fontsize=72:
+          x=(w-text_w)/2:
+          y=(h-text_h)/2:
+          shadowcolor=black@0.5:
+          shadowx=2:
+          shadowy=2:
+          fontfile=/System/Library/Fonts/Helvetica.ttc:
+          box=1:
+          boxcolor=black@0.4:
+          boxborderw=10,
+          fade=in:0:30,
+          fade=out:270:30
+        `.replace(/\s+/g, ''),
         "-c:v", "libx264",
         "-t", "10",
         "-r", frameRate.toString(),
-        "-b:v", bitrate,
-        "-preset", "medium",
-        "-crf", "23",
+        "-b:v", "8M", // Bitrate mais alto para maior qualidade
+        "-preset", "slow", // Preset de qualidade mais alto
+        "-crf", "18", // Valor menor = melhor qualidade
+        "-profile:v", "high",
+        "-level", "4.2",
         "-movflags", "+faststart",
+        "-pix_fmt", "yuv420p",
         "-y", outputPath
       ];
       

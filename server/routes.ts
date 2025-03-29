@@ -913,10 +913,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // TTS-JS routes removidas para simplificar a implementação
 
   // 6.4 FFmpeg video generation
-  // Endpoint para criar vídeo a partir de arquivos de imagens (upload)
-  app.post("/api/video/create-from-images", upload.array("images"), async (req: Request, res: Response) => {
+  // Endpoint para criar vídeo a partir de arquivos de imagens (upload) com opções avançadas
+  app.post("/api/video/create-from-images", upload.fields([
+    { name: "images", maxCount: 20 },
+    { name: "logo", maxCount: 1 },
+    { name: "audio", maxCount: 1 }
+  ]), async (req: Request, res: Response) => {
     try {
-      const files = req.files as Express.Multer.File[];
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
       const {
         outputFileName = `video_${Date.now()}.mp4`,
         duration,
@@ -924,15 +928,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transitionDuration,
         width,
         height,
+        textOverlay,
+        textPosition,
+        textColor,
+        fps,
+        zoomEffect,
+        colorGrading
       } = req.body;
       
-      if (!files || files.length === 0) {
+      if (!files.images || files.images.length === 0) {
         return res.status(400).json({ message: "Images are required" });
       }
       
       const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
       
-      const imagePaths = files.map(file => file.path);
+      const imagePaths = files.images.map(file => file.path);
+      const logoPath = files.logo?.[0]?.path;
+      const audioPath = files.audio?.[0]?.path;
       
       const outputPath = await ffmpegService.createVideoFromImages({
         imagePaths,
@@ -942,6 +954,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transitionDuration: transitionDuration ? parseFloat(transitionDuration) : undefined,
         width: width ? parseInt(width) : undefined,
         height: height ? parseInt(height) : undefined,
+        textOverlay: textOverlay || undefined,
+        textPosition: textPosition || undefined,
+        textColor: textColor || undefined,
+        logo: logoPath,
+        fps: fps ? parseInt(fps) : undefined,
+        zoomEffect: zoomEffect !== undefined ? (zoomEffect === 'true' || zoomEffect === true) : undefined,
+        colorGrading: colorGrading || undefined,
+        audioPath: audioPath
       });
       
       // Get video metadata
@@ -958,7 +978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Novo endpoint para criar vídeo a partir de URLs de imagens
+  // Endpoint para criar vídeo a partir de URLs de imagens com opções avançadas
   app.post("/api/video/create-from-image-urls", async (req: Request, res: Response) => {
     try {
       const {
@@ -969,6 +989,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transitionDuration,
         width,
         height,
+        textOverlay,
+        textPosition,
+        textColor,
+        logoUrl,
+        fps,
+        zoomEffect,
+        colorGrading,
+        audioUrl
       } = req.body;
       
       if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
@@ -1000,6 +1028,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         imagePaths.push(imagePath);
       }
       
+      // Processa o logo, se for fornecido
+      let logoPath: string | undefined;
+      if (logoUrl) {
+        try {
+          const logoResponse = await fetch(logoUrl);
+          if (logoResponse.ok) {
+            const logoBuffer = await logoResponse.arrayBuffer();
+            const logoExtension = logoUrl.split('.').pop() || 'png';
+            logoPath = path.join(tempDir, `logo_${Date.now()}.${logoExtension}`);
+            fs.writeFileSync(logoPath, Buffer.from(logoBuffer));
+          }
+        } catch (error) {
+          console.warn(`Error downloading logo: ${error}`);
+          // Continue without logo if there's an error
+        }
+      }
+      
+      // Processa o áudio, se for fornecido
+      let audioPath: string | undefined;
+      if (audioUrl) {
+        try {
+          const audioResponse = await fetch(audioUrl);
+          if (audioResponse.ok) {
+            const audioBuffer = await audioResponse.arrayBuffer();
+            const audioExtension = audioUrl.split('.').pop() || 'mp3';
+            audioPath = path.join(tempDir, `audio_${Date.now()}.${audioExtension}`);
+            fs.writeFileSync(audioPath, Buffer.from(audioBuffer));
+          }
+        } catch (error) {
+          console.warn(`Error downloading audio: ${error}`);
+          // Continue without audio if there's an error
+        }
+      }
+      
       const outputPath = await ffmpegService.createVideoFromImages({
         imagePaths,
         outputFileName,
@@ -1008,10 +1070,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transitionDuration: transitionDuration ? parseFloat(transitionDuration) : undefined,
         width: width ? parseInt(width) : undefined,
         height: height ? parseInt(height) : undefined,
+        textOverlay: textOverlay || undefined,
+        textPosition: textPosition || undefined,
+        textColor: textColor || undefined,
+        logo: logoPath,
+        fps: fps ? parseInt(fps) : undefined,
+        zoomEffect: zoomEffect !== undefined ? Boolean(zoomEffect) : undefined,
+        colorGrading: colorGrading || undefined,
+        audioPath: audioPath
       });
       
       // Get video metadata
       const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      // Limpar arquivos temporários
+      imagePaths.forEach(imagePath => {
+        try {
+          if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+        } catch (e) { /* ignore cleanup errors */ }
+      });
+      
+      if (logoPath && fs.existsSync(logoPath)) {
+        try { fs.unlinkSync(logoPath); } catch (e) { /* ignore cleanup errors */ }
+      }
+      
+      if (audioPath && fs.existsSync(audioPath)) {
+        try { fs.unlinkSync(audioPath); } catch (e) { /* ignore cleanup errors */ }
+      }
       
       res.status(200).json({
         filePath: outputPath,
@@ -1130,6 +1215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoint para combinar vídeos enviados via upload
   app.post("/api/video/combine-videos", upload.array("videos"), async (req: Request, res: Response) => {
     try {
       const files = req.files as Express.Multer.File[];
@@ -1156,6 +1242,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get video metadata
       const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      res.status(200).json({
+        filePath: outputPath,
+        fileName: path.basename(outputPath),
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        ...metadata
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // Endpoint para criar um vídeo somente com texto
+  app.post("/api/video/create-text-video", async (req: Request, res: Response) => {
+    try {
+      const {
+        text,
+        outputFileName = `text_video_${Date.now()}.mp4`,
+        width,
+        height,
+        frameRate,
+        bitrate,
+      } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
+      const outputPath = await ffmpegService.createTextVideo(text, {
+        outputFileName,
+        width: width ? parseInt(width) : undefined,
+        height: height ? parseInt(height) : undefined,
+        frameRate: frameRate ? parseInt(frameRate) : undefined,
+        bitrate: bitrate || undefined,
+      });
+      
+      // Get video metadata
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      res.status(200).json({
+        filePath: outputPath,
+        fileName: path.basename(outputPath),
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        ...metadata
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Endpoint para combinar vídeos a partir de URLs
+  app.post("/api/video/combine-videos-from-urls", async (req: Request, res: Response) => {
+    try {
+      const {
+        videoUrls,
+        outputFileName = `combined_video_${Date.now()}.mp4`,
+        transition,
+        transitionDuration,
+      } = req.body;
+      
+      if (!videoUrls || !Array.isArray(videoUrls) || videoUrls.length === 0) {
+        return res.status(400).json({ message: "Video URLs are required" });
+      }
+      
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
+      // Cria o diretório de upload temporário se não existir
+      const tempDir = path.join(process.cwd(), "uploads/temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Baixa os vídeos a partir das URLs
+      const videoPaths: string[] = [];
+      for (let i = 0; i < videoUrls.length; i++) {
+        const videoUrl = videoUrls[i];
+        try {
+          const response = await fetch(videoUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch video from ${videoUrl}`);
+          }
+          
+          const videoBuffer = await response.arrayBuffer();
+          const extension = videoUrl.split('.').pop() || 'mp4';
+          const videoPath = path.join(tempDir, `video_${Date.now()}_${i}.${extension}`);
+          
+          fs.writeFileSync(videoPath, Buffer.from(videoBuffer));
+          videoPaths.push(videoPath);
+        } catch (error) {
+          console.warn(`Error downloading video from ${videoUrl}: ${error}`);
+          // Continue with other videos
+        }
+      }
+      
+      if (videoPaths.length === 0) {
+        return res.status(400).json({ message: "Failed to download any videos" });
+      }
+      
+      const outputPath = await ffmpegService.combineVideos({
+        videoPaths,
+        outputFileName,
+        transition: transition || undefined,
+        transitionDuration: transitionDuration ? parseFloat(transitionDuration) : undefined,
+      });
+      
+      // Get video metadata
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      // Limpar arquivos temporários
+      videoPaths.forEach(videoPath => {
+        try {
+          if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+        } catch (e) { /* ignore cleanup errors */ }
+      });
       
       res.status(200).json({
         filePath: outputPath,
