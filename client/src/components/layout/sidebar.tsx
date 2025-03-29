@@ -99,9 +99,9 @@ export function Sidebar() {
               {navItems.map((item) => (
                 <li key={item.href}>
                   <Link href={item.href}>
-                    <a
+                    <div
                       className={cn(
-                        "flex items-center space-x-2 p-3 rounded-lg",
+                        "flex items-center space-x-2 p-3 rounded-lg cursor-pointer",
                         location === item.href
                           ? "bg-gray-800 text-white"
                           : "hover:bg-gray-800 text-gray-300"
@@ -109,7 +109,7 @@ export function Sidebar() {
                     >
                       {item.icon}
                       <span>{item.label}</span>
-                    </a>
+                    </div>
                   </Link>
                 </li>
               ))}
