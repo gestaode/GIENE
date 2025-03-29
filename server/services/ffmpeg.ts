@@ -39,18 +39,29 @@ interface ImageToVideoOptions {
   imagePaths: string[];
   outputFileName: string;
   duration?: number;
-  transition?: 'fade' | 'wipe' | 'slide' | 'zoom' | 'radial' | 'none'; // Mais opções de transição
+  transition?: 'fade' | 'wipe' | 'slide' | 'zoom' | 'radial' | 'crosszoom' | 'dissolve' | 'pixelize' | 'none'; // Opções expandidas de transição
   transitionDuration?: number;
   width?: number;
   height?: number;
   textOverlay?: string; // Texto para sobrepor às imagens
   textPosition?: 'top' | 'center' | 'bottom'; // Posição do texto
   textColor?: string; // Cor do texto
+  textFont?: string; // Fonte do texto
+  textAnimation?: 'none' | 'typewriter' | 'fadein' | 'slidein'; // Animação para o texto
   logo?: string; // Caminho para logotipo a ser exibido
+  logoPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'; // Posição do logo
   fps?: number; // Taxa de quadros por segundo
   audioPath?: string; // Caminho para áudio a ser adicionado diretamente
   zoomEffect?: boolean; // Aplicar efeito Ken Burns (zoom suave)
-  colorGrading?: 'vibrant' | 'moody' | 'warm' | 'cool' | 'none'; // Ajustes de cor
+  colorGrading?: 'vibrant' | 'moody' | 'warm' | 'cool' | 'cinematic' | 'vintage' | 'none'; // Mais opções de ajustes de cor
+  subtitleFile?: string; // Arquivo SRT para legendas
+  autoSubtitle?: boolean; // Gerar legendas automaticamente
+  watermark?: string; // Texto ou imagem para marca d'água
+  beatSync?: boolean; // Sincronizar transições com batidas da música
+  filterGraph?: string; // Filtergraph FFmpeg avançado personalizado (para usuários avançados)
+  customOverlays?: Array<{path: string, position: string, duration: number}>; // Elementos de sobreposição adicionais (emojis, stickers)
+  outputQuality?: 'draft' | 'standard' | 'high' | 'ultra'; // Presets de qualidade pré-configurados
+  social?: 'tiktok' | 'instagram' | 'youtube' | 'facebook'; // Otimizar para plataforma específica
 }
 
 interface CombineVideosOptions {
@@ -70,6 +81,7 @@ interface VideoMetadata {
 export class FFmpegService {
   /**
    * Create video from a series of images com efeitos avançados para maior engajamento e conversão
+   * Versão otimizada para máximo engajamento em redes sociais
    */
   async createVideoFromImages(options: ImageToVideoOptions): Promise<string> {
     const {
@@ -83,11 +95,22 @@ export class FFmpegService {
       textOverlay,
       textPosition = 'bottom',
       textColor = 'white',
+      textFont,
+      textAnimation = 'none',
       logo,
+      logoPosition = 'top-right',
       fps = 30,
       zoomEffect = true,
       colorGrading = 'vibrant',
-      audioPath
+      audioPath,
+      subtitleFile,
+      autoSubtitle = false,
+      watermark,
+      beatSync = false,
+      filterGraph = '',
+      customOverlays = [],
+      outputQuality = 'high',
+      social = 'tiktok'
     } = options;
 
     if (imagePaths.length === 0) {
@@ -97,6 +120,19 @@ export class FFmpegService {
     try {
       const outputPath = path.join(OUTPUT_DIR, outputFileName);
       const tempVideoPath = path.join(TEMP_DIR, `temp_${Date.now()}.mp4`);
+      
+      // Gera arquivo de legendas se autoSubtitle estiver ativado e textOverlay for fornecido
+      let subtitlePath = "";
+      if (autoSubtitle && textOverlay) {
+        // Duração total do vídeo em segundos
+        const videoTotalDuration = imagePaths.length * duration;
+        // Gera arquivo SRT de legendas
+        subtitlePath = await this.generateSubtitleFile(
+          textOverlay, 
+          videoTotalDuration, 
+          `subtitles_${Date.now()}.srt`
+        );
+      }
       
       // Create a temporary file for the list of images
       const listFile = path.join(TEMP_DIR, `list_${Date.now()}.txt`);
@@ -138,6 +174,15 @@ export class FFmpegService {
         case 'radial':
           transitionFilter = `xfade=transition=circleclose:duration=${transitionDuration}`;
           break;
+        case 'crosszoom':
+          transitionFilter = `xfade=transition=squeezeh:duration=${transitionDuration}`;
+          break;
+        case 'dissolve':
+          transitionFilter = `xfade=transition=dissolve:duration=${transitionDuration}`;
+          break;
+        case 'pixelize':
+          transitionFilter = `xfade=transition=pixelize:duration=${transitionDuration}`;
+          break;
         case 'fade':
         default:
           transitionFilter = `xfade=transition=fade:duration=${transitionDuration}`;
@@ -159,6 +204,12 @@ export class FFmpegService {
         case 'cool':
           colorFilter = "eq=saturation=1.1:gamma_b=1.1:gamma_r=0.9";
           break;
+        case 'cinematic':
+          colorFilter = "eq=saturation=0.9:contrast=1.25:brightness=0.95,curves=master='0/0 0.25/0.15 0.5/0.5 0.75/0.85 1/1'";
+          break;
+        case 'vintage':
+          colorFilter = "eq=saturation=0.75:contrast=1.15:brightness=1.05,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3";
+          break;
         case 'none':
         default:
           colorFilter = "";
@@ -169,24 +220,150 @@ export class FFmpegService {
       filters.push(scaleFilter);
       if (colorFilter) filters.push(colorFilter);
       
-      // Adiciona texto se fornecido
+      // Adiciona texto se fornecido, com suporte a animações
       if (textOverlay) {
         let yPos = "(h-text_h-25)"; // posição inferior
         if (textPosition === 'top') yPos = "25";
         else if (textPosition === 'center') yPos = "(h-text_h)/2";
         
-        // Texto com sombra e fundo
-        filters.push(`drawtext=text='${textOverlay.replace(/'/g, "'\\\\''")}':fontsize=48:fontcolor=${textColor}:x=(w-text_w)/2:y=${yPos}:shadowcolor=black@0.5:shadowx=2:shadowy=2:box=1:boxcolor=black@0.4:boxborderw=10`);
+        // Seleção de fonte personalizada ou padrão
+        const fontFile = textFont || "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+        
+        // Define a animação de texto com base na seleção
+        let textExpression = "";
+        switch (textAnimation) {
+          case 'typewriter':
+            // Efeito de digitação, revela o texto caractere por caractere
+            textExpression = `:enable='between(t,0,${duration})':x=(w-text_w)/2:y=${yPos}:fontcolor_expr=alpha('${textColor}', min(1, (t*3)))`;
+            break;
+          case 'fadein':
+            // Efeito de fade in para o texto
+            textExpression = `:enable='between(t,0,${duration})':x=(w-text_w)/2:y=${yPos}:alpha='if(lt(t,1),t,1)'`;
+            break;
+          case 'slidein':
+            // Efeito de deslize para o texto
+            textExpression = `:enable='between(t,0,${duration})':x='min((w-text_w)/2, w*t/2)':y=${yPos}`;
+            break;
+          default:
+            // Sem animação, texto estático
+            textExpression = `:x=(w-text_w)/2:y=${yPos}`;
+        }
+        
+        // Texto com sombra e fundo, incluindo suporte para animações
+        filters.push(`drawtext=text='${textOverlay.replace(/'/g, "'\\\\''")}':fontfile='${fontFile}':fontsize=48:fontcolor=${textColor}${textExpression}:shadowcolor=black@0.5:shadowx=2:shadowy=2:box=1:boxcolor=black@0.4:boxborderw=10`);
       }
       
-      // Adiciona logo se fornecido
+      // Adiciona logo se fornecido com suporte a diferentes posições
       if (logo) {
-        // Aplica o logo no canto superior direito
-        filters.push(`movie=${logo}[watermark];[v][watermark]overlay=W-w-10:10`);
+        let overlayPos = "";
+        switch (logoPosition) {
+          case 'top-left':
+            overlayPos = "10:10";
+            break;
+          case 'top-right':
+            overlayPos = "W-w-10:10";
+            break;
+          case 'bottom-left':
+            overlayPos = "10:H-h-10";
+            break;
+          case 'bottom-right':
+            overlayPos = "W-w-10:H-h-10";
+            break;
+          default:
+            overlayPos = "W-w-10:10"; // Padrão: canto superior direito
+        }
+        
+        filters.push(`movie=${logo}[watermark];[v][watermark]overlay=${overlayPos}`);
+      }
+      
+      // Adiciona marca d'água se fornecida
+      if (watermark) {
+        filters.push(`drawtext=text='${watermark.replace(/'/g, "'\\\\''")}':fontsize=24:fontcolor=white@0.5:x=(w-text_w)/2:y=(h-text_h-10)`);
+      }
+      
+      // Adiciona subtítulos de arquivo externo ou automaticamente gerados
+      if (subtitleFile) {
+        // Usa o arquivo de legendas fornecido pelo usuário
+        filters.push(`subtitles=${subtitleFile}`);
+      } else if (subtitlePath) {
+        // Usa o arquivo de legendas gerado automaticamente
+        filters.push(`subtitles=${subtitlePath}`);
       }
       
       // Finaliza com fade in/out
       filters.push("fade=in:0:30,fade=out:st=" + (imagePaths.length * duration - 1) + ":d=1");
+      
+      // Determina o preset de qualidade com base na opção selecionada
+      let preset = "medium";
+      let crf = "23";
+      
+      switch (outputQuality) {
+        case 'draft':
+          preset = "ultrafast";
+          crf = "28";
+          break;
+        case 'standard':
+          preset = "medium";
+          crf = "23";
+          break;
+        case 'high':
+          preset = "slow";
+          crf = "18";
+          break;
+        case 'ultra':
+          preset = "veryslow";
+          crf = "16";
+          break;
+      }
+      
+      // Otimiza os parâmetros para plataformas específicas
+      let socialMediaOptimization = [];
+      switch (social) {
+        case 'tiktok':
+          // Otimização para TikTok: relação 9:16, compressão eficiente
+          socialMediaOptimization = [
+            "-profile:v", "high", // Perfil de vídeo para melhor compressão
+            "-level", "4.2",
+            "-movflags", "+faststart",
+            "-metadata", "title=Criado com VideoGenie AI"
+          ];
+          break;
+        case 'instagram':
+          // Otimização para Instagram: qualidade maior
+          socialMediaOptimization = [
+            "-profile:v", "high",
+            "-level", "4.2",
+            "-movflags", "+faststart",
+            "-metadata", "title=Criado com VideoGenie AI"
+          ];
+          break;
+        case 'youtube':
+          // YouTube: melhor qualidade, com configurações para streaming
+          socialMediaOptimization = [
+            "-profile:v", "high",
+            "-level", "4.2",
+            "-movflags", "+faststart",
+            "-g", "60", // Keyframes a cada 2 segundos para streaming
+            "-metadata", "title=Criado com VideoGenie AI"
+          ];
+          break;
+        case 'facebook':
+          // Facebook: otimização para engajamento móvel
+          socialMediaOptimization = [
+            "-profile:v", "main",
+            "-level", "3.1", // Mais compatibilidade com dispositivos antigos
+            "-movflags", "+faststart",
+            "-metadata", "title=Criado com VideoGenie AI"
+          ];
+          break;
+        default:
+          // Default: configurações para qualquer plataforma
+          socialMediaOptimization = [
+            "-profile:v", "high",
+            "-level", "4.2",
+            "-movflags", "+faststart"
+          ];
+      }
       
       // Execute FFmpeg command com configurações de alta qualidade
       const ffmpegArgs = [
@@ -195,14 +372,12 @@ export class FFmpegService {
         "-i", listFile,
         "-filter_complex", filters.join(","),
         "-c:v", "libx264",
-        "-preset", "slow", // Usa 'slow' em vez de 'medium' para melhor qualidade
-        "-crf", "18", // Valor menor = melhor qualidade (18 é considerado visualmente sem perdas)
-        "-profile:v", "high", // Utiliza o profile High para melhor compressão
-        "-level", "4.2", // Compatível com a maioria dos dispositivos modernos
+        "-preset", preset, // Usa o preset determinado pelo nível de qualidade solicitado
+        "-crf", crf, // Valor do CRF baseado na qualidade solicitada
         "-bf", "2", // Número de B-frames
         "-r", fps.toString(), // Define a taxa de quadros
-        "-movflags", "+faststart", // Permite que o vídeo comece a reproduzir antes de ser totalmente baixado
         "-pix_fmt", "yuv420p", // Formato de pixel para compatibilidade
+        ...socialMediaOptimization, // Adiciona as configurações específicas para a plataforma
         "-y", audioPath ? tempVideoPath : outputPath
       ];
       
@@ -225,6 +400,10 @@ export class FFmpegService {
       
       // Clean up the list file
       fs.unlinkSync(listFile);
+      // Limpa o arquivo de legendas temporário se existir
+      if (subtitlePath && fs.existsSync(subtitlePath)) {
+        fs.unlinkSync(subtitlePath);
+      }
       
       return outputPath;
     } catch (error) {
@@ -410,6 +589,63 @@ export class FFmpegService {
       log(`Error creating text video: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
       throw error;
     }
+  }
+
+  /**
+   * Gera arquivo de legendas SRT a partir de um texto
+   * Utilizado para sincronizar texto com vídeo automaticamente
+   */
+  async generateSubtitleFile(text: string, duration: number, outputFileName: string): Promise<string> {
+    try {
+      // Quebra o texto em linhas para criar legendas
+      const lines = text.split(/[.!?]+/).filter(line => line.trim().length > 0);
+      const subtitleFilePath = path.join(TEMP_DIR, outputFileName);
+      
+      // Se não houver texto, retorna vazio
+      if (lines.length === 0) {
+        return "";
+      }
+      
+      // Calcula o tempo por linha para distribuir as legendas uniformemente
+      const timePerLine = duration / lines.length;
+      
+      // Gera o conteúdo SRT
+      let srtContent = "";
+      lines.forEach((line, index) => {
+        const startTime = index * timePerLine;
+        const endTime = (index + 1) * timePerLine;
+        
+        // Formata os tempos no formato SRT (HH:MM:SS,ms)
+        const startFormatted = this.formatSRTTime(startTime);
+        const endFormatted = this.formatSRTTime(endTime);
+        
+        // Adiciona a entrada SRT
+        srtContent += `${index + 1}\n`;
+        srtContent += `${startFormatted} --> ${endFormatted}\n`;
+        srtContent += `${line.trim()}\n\n`;
+      });
+      
+      // Escreve o arquivo SRT
+      fs.writeFileSync(subtitleFilePath, srtContent);
+      
+      return subtitleFilePath;
+    } catch (error) {
+      log(`Error generating subtitle file: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
+      return "";
+    }
+  }
+  
+  /**
+   * Formata o tempo em segundos para o formato SRT (HH:MM:SS,ms)
+   */
+  private formatSRTTime(seconds: number): string {
+    const date = new Date(seconds * 1000);
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const secs = date.getUTCSeconds().toString().padStart(2, '0');
+    const ms = date.getUTCMilliseconds().toString().padStart(3, '0');
+    
+    return `${hours}:${minutes}:${secs},${ms}`;
   }
 
   /**
