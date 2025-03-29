@@ -25,7 +25,7 @@ type NavItem = {
 export function Sidebar() {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+
   const navItems: NavItem[] = [
     {
       href: "/",
@@ -68,11 +68,11 @@ export function Sidebar() {
       icon: <TestTube size={20} />,
     },
   ];
-  
+
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
-  
+
   return (
     <>
       {/* Mobile Menu Button */}
@@ -82,7 +82,7 @@ export function Sidebar() {
       >
         {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
-      
+
       {/* Sidebar */}
       <aside className={cn(
         "bg-gray-900 text-white w-full md:w-64 md:fixed md:h-full flex-shrink-0",
@@ -93,7 +93,7 @@ export function Sidebar() {
             <Video className="text-primary-500 text-2xl" />
             <h1 className="text-xl font-bold">VideoGenie</h1>
           </div>
-          
+
           <nav>
             <ul className="space-y-1">
               {navItems.map((item) => (
@@ -116,7 +116,7 @@ export function Sidebar() {
             </ul>
           </nav>
         </div>
-        
+
         <div className="absolute bottom-0 left-0 w-full p-4 border-t border-gray-800">
           <UserAvatar />
         </div>
