@@ -29,47 +29,91 @@ export function VideoPreview({ media, videoDetails, onVideoGenerated }: VideoPre
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [generationStep, setGenerationStep] = useState<string>("");
   
-  // Simulating video generation process
+  // Função real para gerar vídeo usando FFmpeg no servidor
   const generateVideo = async () => {
     setIsGenerating(true);
     setProgress(0);
     setGenerationStep("Preparando arquivos de mídia...");
     
     try {
-      // In a real implementation, we would send the media files to the server
-      // and process them using FFmpeg. This is a simplified version.
-      
       const images = media.filter(m => m.type === "image");
       const videos = media.filter(m => m.type === "video");
       const audio = media.find(m => m.type === "audio");
       
-      // Simulate different steps with delays
-      await new Promise(resolve => setTimeout(resolve, 1500));
       setProgress(20);
       setGenerationStep("Processando imagens e vídeos...");
       
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setProgress(40);
-      setGenerationStep("Combinando mídias...");
+      let videoResult;
       
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Etapa 1: Se tivermos imagens, criar um vídeo a partir delas
+      if (images.length > 0) {
+        
+        // Usamos a API que trabalha com URLs de imagens
+        const imageUrls = images.map(image => image.url);
+        
+        setProgress(40);
+        setGenerationStep("Criando vídeo a partir das imagens...");
+        
+        const response = await fetch('/api/video/create-from-image-urls', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            imageUrls,
+            duration: 2, // 2 segundos por imagem
+            transition: 'fade',
+            transitionDuration: 0.5
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Falha ao criar vídeo a partir das imagens');
+        }
+        
+        videoResult = await response.json();
+        
+      } else if (videos.length > 0) {
+        // Se não tivermos imagens, mas tivermos vídeos, usamos o primeiro vídeo
+        videoResult = {
+          url: videos[0].url,
+          fileName: 'video.mp4'
+        };
+      } else {
+        throw new Error('Nenhuma imagem ou vídeo selecionado');
+      }
+      
       setProgress(60);
-      setGenerationStep("Adicionando áudio...");
+      setGenerationStep("Adicionando áudio ao vídeo...");
       
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setProgress(80);
-      setGenerationStep("Finalizando vídeo...");
+      // Etapa 2: Se tivermos áudio, adicionar ao vídeo
+      if (audio) {
+        // Usamos a API que trabalha com URLs em vez de arquivos
+        const response = await fetch('/api/video/add-audio-from-urls', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            videoUrl: videoResult.url,
+            audioUrl: audio.url,
+            loop: true // Loop áudio se for menor que o vídeo
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Falha ao adicionar áudio ao vídeo');
+        }
+        
+        videoResult = await response.json();
+      }
       
-      await new Promise(resolve => setTimeout(resolve, 1500));
       setProgress(100);
+      setGenerationStep("Vídeo finalizado!");
       
-      // If we have a video in the media, use it as our preview
-      const previewUrl = videos.length > 0 
-        ? videos[0].url 
-        : "https://www.w3schools.com/html/mov_bbb.mp4"; // Fallback video
-      
-      setVideoUrl(previewUrl);
-      onVideoGenerated(previewUrl);
+      // Definir a URL final do vídeo
+      setVideoUrl(videoResult.url);
+      onVideoGenerated(videoResult.url);
       
       toast({
         title: "Vídeo gerado com sucesso!",

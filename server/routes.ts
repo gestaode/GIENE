@@ -7,6 +7,7 @@ import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import fs from "fs";
 import { 
   insertApiSettingSchema, 
   insertLeadSchema, 
@@ -912,6 +913,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // TTS-JS routes removidas para simplificar a implementação
 
   // 6.4 FFmpeg video generation
+  // Endpoint para criar vídeo a partir de arquivos de imagens (upload)
   app.post("/api/video/create-from-images", upload.array("images"), async (req: Request, res: Response) => {
     try {
       const files = req.files as Express.Multer.File[];
@@ -955,7 +957,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
     }
   });
+  
+  // Novo endpoint para criar vídeo a partir de URLs de imagens
+  app.post("/api/video/create-from-image-urls", async (req: Request, res: Response) => {
+    try {
+      const {
+        imageUrls,
+        outputFileName = `video_${Date.now()}.mp4`,
+        duration,
+        transition,
+        transitionDuration,
+        width,
+        height,
+      } = req.body;
+      
+      if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+        return res.status(400).json({ message: "Image URLs are required" });
+      }
+      
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
+      // Cria o diretório de upload temporário se não existir
+      const tempDir = path.join(process.cwd(), "uploads/temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Baixa as imagens a partir das URLs
+      const imagePaths: string[] = [];
+      for (let i = 0; i < imageUrls.length; i++) {
+        const imageUrl = imageUrls[i];
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image from ${imageUrl}`);
+        }
+        
+        const imageBuffer = await response.arrayBuffer();
+        const extension = imageUrl.split('.').pop() || 'jpg';
+        const imagePath = path.join(tempDir, `image_${Date.now()}_${i}.${extension}`);
+        
+        fs.writeFileSync(imagePath, Buffer.from(imageBuffer));
+        imagePaths.push(imagePath);
+      }
+      
+      const outputPath = await ffmpegService.createVideoFromImages({
+        imagePaths,
+        outputFileName,
+        duration: duration ? parseFloat(duration) : undefined,
+        transition: transition || undefined,
+        transitionDuration: transitionDuration ? parseFloat(transitionDuration) : undefined,
+        width: width ? parseInt(width) : undefined,
+        height: height ? parseInt(height) : undefined,
+      });
+      
+      // Get video metadata
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      res.status(200).json({
+        filePath: outputPath,
+        fileName: path.basename(outputPath),
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        ...metadata
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
 
+  // Endpoint para adicionar áudio a um vídeo com arquivos enviados via form
   app.post("/api/video/add-audio", upload.fields([
     { name: "video", maxCount: 1 },
     { name: "audio", maxCount: 1 }
@@ -976,6 +1045,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const videoPath = files.video[0].path;
       const audioPath = files.audio[0].path;
       
+      const outputPath = await ffmpegService.addAudioToVideo({
+        videoPath,
+        audioPath,
+        outputFileName,
+        loop: loop === 'true' || loop === true,
+      });
+      
+      // Get video metadata
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      res.status(200).json({
+        filePath: outputPath,
+        fileName: path.basename(outputPath),
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        ...metadata
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // Novo endpoint para adicionar áudio a um vídeo usando URLs
+  app.post("/api/video/add-audio-from-urls", async (req: Request, res: Response) => {
+    try {
+      const {
+        videoUrl,
+        audioUrl,
+        outputFileName = `video_with_audio_${Date.now()}.mp4`,
+        loop,
+      } = req.body;
+      
+      if (!videoUrl || !audioUrl) {
+        return res.status(400).json({ message: "Video URL and audio URL are required" });
+      }
+      
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
+      // Cria o diretório de upload temporário se não existir
+      const tempDir = path.join(process.cwd(), "uploads/temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Baixa o vídeo
+      const videoResponse = await fetch(videoUrl);
+      if (!videoResponse.ok) {
+        throw new Error(`Failed to fetch video from ${videoUrl}`);
+      }
+      const videoBuffer = await videoResponse.arrayBuffer();
+      const videoExtension = videoUrl.split('.').pop() || 'mp4';
+      const videoPath = path.join(tempDir, `video_${Date.now()}.${videoExtension}`);
+      fs.writeFileSync(videoPath, Buffer.from(videoBuffer));
+      
+      // Baixa o áudio
+      const audioResponse = await fetch(audioUrl);
+      if (!audioResponse.ok) {
+        throw new Error(`Failed to fetch audio from ${audioUrl}`);
+      }
+      const audioBuffer = await audioResponse.arrayBuffer();
+      const audioExtension = audioUrl.split('.').pop() || 'mp3';
+      const audioPath = path.join(tempDir, `audio_${Date.now()}.${audioExtension}`);
+      fs.writeFileSync(audioPath, Buffer.from(audioBuffer));
+      
+      // Processa a combinação
       const outputPath = await ffmpegService.addAudioToVideo({
         videoPath,
         audioPath,
