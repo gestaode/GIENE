@@ -25,6 +25,7 @@ import { MistralAIService } from "./services/mistral";
 import { FFmpegService } from "./services/ffmpeg";
 import { GoogleCloudTTSService } from "./services/google-cloud-tts";
 import { ResponsiveVoiceService } from "./services/responsive-voice";
+import { PremiumBrazilianVoiceService } from "./services/premium-brazilian-voice";
 
 // Setup file storage paths
 const __filename = fileURLToPath(import.meta.url);
@@ -95,6 +96,8 @@ function initializeService(req: Request, serviceName: string) {
       return new MistralAIService(process.env.MISTRAL_API_KEY || '');
     case 'ffmpeg':
       return new FFmpegService();
+    case 'premium_brazilian_voice':
+      return new PremiumBrazilianVoiceService();
 
     default:
       throw new Error(`Unknown service: ${serviceName}`);
@@ -904,6 +907,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const responsiveVoiceService = initializeService(req, 'responsive_voice') as ResponsiveVoiceService;
       const voices = await responsiveVoiceService.getVoices();
+      res.status(200).json(voices);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // 6.5.5 Premium Brazilian Voice API - Serviço especializado para vozes brasileiras
+  app.post("/api/premium-brazilian-voice/synthesize", async (req: Request, res: Response) => {
+    try {
+      const { text, voice, speed } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      const premiumVoiceService = initializeService(req, 'premium_brazilian_voice') as PremiumBrazilianVoiceService;
+      
+      const result = await premiumVoiceService.synthesizeSpeech({
+        text,
+        voice: voice || "Ricardo Autoritativo",
+        speed: speed || 1.0
+      });
+      
+      res.status(200).json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  app.get("/api/premium-brazilian-voice/voices", async (req: Request, res: Response) => {
+    try {
+      const premiumVoiceService = initializeService(req, 'premium_brazilian_voice') as PremiumBrazilianVoiceService;
+      
+      const voices = await premiumVoiceService.getVoices();
+      
       res.status(200).json(voices);
     } catch (error) {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
