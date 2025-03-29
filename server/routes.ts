@@ -20,6 +20,7 @@ import { OpenAITTSService } from "./services/openai-tts";
 import { GeminiService } from "./services/gemini";
 import { CoquiTTSService } from "./services/coqui-tts";
 import { HuggingFaceService } from "./services/huggingface";
+import { MistralAIService } from "./services/mistral";
 import { FFmpegService } from "./services/ffmpeg";
 
 // Setup file storage paths
@@ -67,6 +68,8 @@ function initializeService(req: Request, serviceName: string) {
       return new CoquiTTSService();
     case 'huggingface':
       return new HuggingFaceService(process.env.HUGGINGFACE_API_KEY);
+    case 'mistral':
+      return new MistralAIService(process.env.MISTRAL_API_KEY || '');
     case 'ffmpeg':
       return new FFmpegService();
     default:
@@ -204,6 +207,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message = isValid ? "HuggingFace API connection successful" : "Invalid HuggingFace API key";
           } catch (error) {
             message = "Failed to connect to HuggingFace API";
+          }
+          break;
+          
+        case 'mistral':
+          try {
+            const mistralService = new MistralAIService(apiKey);
+            const result = await mistralService.suggestTrendingTopics("test", 1);
+            isValid = Array.isArray(result) && result.length > 0;
+            message = isValid ? "Mistral AI API connection successful" : "Invalid Mistral API key";
+          } catch (error) {
+            message = "Failed to connect to Mistral AI API";
           }
           break;
         
@@ -601,6 +615,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const huggingfaceService = initializeService(req, 'huggingface') as HuggingFaceService;
       
       const topics = await huggingfaceService.suggestTrendingTopics(theme, count);
+      
+      res.status(200).json(topics);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // 6.2.3 Mistral AI API (Free alternative to OpenAI)
+  app.post("/api/mistral/generate-script", async (req: Request, res: Response) => {
+    try {
+      const {
+        theme,
+        targetAudience,
+        duration,
+        tone,
+        keywords,
+        additionalInstructions
+      } = req.body;
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme is required" });
+      }
+      
+      const mistralService = initializeService(req, 'mistral') as MistralAIService;
+      
+      const script = await mistralService.generateVideoScript({
+        theme,
+        targetAudience,
+        duration,
+        tone,
+        keywords,
+        additionalInstructions
+      });
+      
+      res.status(200).json(script);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/mistral/generate-content", async (req: Request, res: Response) => {
+    try {
+      const { videoScript, options } = req.body;
+      
+      if (!videoScript) {
+        return res.status(400).json({ message: "Video script is required" });
+      }
+      
+      const mistralService = initializeService(req, 'mistral') as MistralAIService;
+      
+      const content = await mistralService.generateSocialMediaContent(videoScript, options);
+      
+      res.status(200).json(content);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/mistral/trending-topics", async (req: Request, res: Response) => {
+    try {
+      const theme = req.query.theme as string;
+      const count = parseInt(req.query.count as string || '5');
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme parameter is required" });
+      }
+      
+      const mistralService = initializeService(req, 'mistral') as MistralAIService;
+      
+      const topics = await mistralService.suggestTrendingTopics(theme, count);
       
       res.status(200).json(topics);
     } catch (error) {
