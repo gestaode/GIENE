@@ -85,10 +85,10 @@ export function CalendarView({ scheduledVideos, onSelectVideo }: CalendarViewPro
         locale={ptBR}
         className="rounded-md border"
         components={{
-          DayContent: (props) => (
+          DayContent: ({ date }) => (
             <>
-              {props.day.toString()}
-              {renderDay(props.date)}
+              {date.getDate()}
+              {renderDay(date)}
             </>
           ),
         }}

@@ -16,6 +16,7 @@ import {
 import { PexelsService } from "./services/pexels";
 import { OpenAIService } from "./services/openai";
 import { GoogleTTSService } from "./services/tts";
+import { OpenAITTSService } from "./services/openai-tts";
 import { FFmpegService } from "./services/ffmpeg";
 
 // Setup file storage paths
@@ -55,6 +56,8 @@ function initializeService(req: Request, serviceName: string) {
       return new OpenAIService(process.env.OPENAI_API_KEY || '');
     case 'google_tts':
       return new GoogleTTSService(process.env.GOOGLE_TTS_API_KEY || '');
+    case 'openai_tts':
+      return new OpenAITTSService(process.env.OPENAI_API_KEY || '');
     case 'ffmpeg':
       return new FFmpegService();
     default:
@@ -471,6 +474,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const voices = await ttsService.getVoices(languageCode);
       
+      res.status(200).json(voices);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // 6.3.1 OpenAI TTS API
+  app.post("/api/openai-tts/synthesize", async (req: Request, res: Response) => {
+    try {
+      const { text, voice, speed } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      const ttsService = initializeService(req, 'openai_tts') as OpenAITTSService;
+      
+      const result = await ttsService.synthesizeSpeech({
+        text,
+        voice,
+        speed
+      });
+      
+      res.status(200).json({
+        fileName: result.fileName,
+        filePath: `/uploads/audio/${result.fileName}`,
+        audioContent: result.audioContent
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/openai-tts/voices", async (req: Request, res: Response) => {
+    try {
+      const ttsService = initializeService(req, 'openai_tts') as OpenAITTSService;
+      const voices = await ttsService.getVoices();
       res.status(200).json(voices);
     } catch (error) {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
