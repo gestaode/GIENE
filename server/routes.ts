@@ -8,6 +8,15 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import fs from "fs";
+
+// Função auxiliar para padronizar respostas de erro
+function errorResponse(res: Response, status: number, message: string, error?: any) {
+  return res.status(status).json({ 
+    success: false,
+    message, 
+    error: error instanceof Error ? error.message : String(error || "") 
+  });
+}
 import { 
   insertApiSettingSchema, 
   insertLeadSchema, 
@@ -1212,7 +1221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
       
       if (!files.video || !files.audio) {
-        return res.status(400).json({ message: "Video and audio files are required" });
+        return res.status(400).json({ message: "Arquivos de vídeo e áudio são obrigatórios" });
       }
       
       const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
@@ -1252,7 +1261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
       
       if (!videoUrl || !audioUrl) {
-        return res.status(400).json({ message: "Video URL and audio URL are required" });
+        return res.status(400).json({ message: "URL do vídeo e URL do áudio são obrigatórios" });
       }
       
       const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
@@ -1391,7 +1400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
       
       if (!videoPath || !audioPath) {
-        return res.status(400).json({ message: "Video path and audio path are required" });
+        return errorResponse(res, 400, "Caminhos do vídeo e áudio são obrigatórios");
       }
       
       console.log("Inicializando FFmpegService...");
@@ -1403,11 +1412,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fullAudioPath = path.join(process.cwd(), audioPath.startsWith('/') ? audioPath.substring(1) : audioPath);
       
       if (!fs.existsSync(fullVideoPath)) {
-        return res.status(400).json({ message: "Video file not found", error: `Cannot find video at path: ${fullVideoPath}` });
+        return errorResponse(res, 400, "Arquivo de vídeo não encontrado", `Não foi possível encontrar o vídeo no caminho: ${fullVideoPath}`);
       }
       
       if (!fs.existsSync(fullAudioPath)) {
-        return res.status(400).json({ message: "Audio file not found", error: `Cannot find audio at path: ${fullAudioPath}` });
+        return errorResponse(res, 400, "Arquivo de áudio não encontrado", `Não foi possível encontrar o áudio no caminho: ${fullAudioPath}`);
       }
       
       // Processa a combinação
@@ -1429,11 +1438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...metadata
       });
     } catch (error) {
-      res.status(500).json({ 
-        success: false,
-        message: "Server error", 
-        error: error instanceof Error ? error.message : String(error) 
-      });
+      return errorResponse(res, 500, "Erro no servidor", error);
     }
   });
   
@@ -1654,12 +1659,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...metadata
       });
     } catch (error) {
-      console.error(`Error creating advanced video: ${error}`);
-      res.status(500).json({
-        success: false,
-        message: "Server error",
-        error: error instanceof Error ? error.message : String(error),
-      });
+      console.error(`Erro ao criar vídeo avançado: ${error}`);
+      return errorResponse(res, 500, "Erro ao criar vídeo", error);
     }
   });
 
@@ -1674,7 +1675,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
       
       if (!videoUrls || !Array.isArray(videoUrls) || videoUrls.length === 0) {
-        return res.status(400).json({ message: "Video URLs are required" });
+        return errorResponse(res, 400, "URLs de vídeo são obrigatórias");
       }
       
       const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
@@ -1692,7 +1693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const response = await fetch(videoUrl);
           if (!response.ok) {
-            throw new Error(`Failed to fetch video from ${videoUrl}`);
+            throw new Error(`Falha ao baixar o vídeo de ${videoUrl}`);
           }
           
           const videoBuffer = await response.arrayBuffer();
@@ -1702,13 +1703,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fs.writeFileSync(videoPath, Buffer.from(videoBuffer));
           videoPaths.push(videoPath);
         } catch (error) {
-          console.warn(`Error downloading video from ${videoUrl}: ${error}`);
-          // Continue with other videos
+          console.warn(`Erro ao baixar vídeo de ${videoUrl}: ${error}`);
+          // Continua com outros vídeos
         }
       }
       
       if (videoPaths.length === 0) {
-        return res.status(400).json({ message: "Failed to download any videos" });
+        return errorResponse(res, 400, "Não foi possível baixar nenhum vídeo");
       }
       
       const outputPath = await ffmpegService.combineVideos({
@@ -1730,7 +1731,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       videoPaths.forEach(videoPath => {
         try {
           if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
-        } catch (e) { /* ignore cleanup errors */ }
+        } catch (e) { /* ignorar erros de limpeza */ }
       });
       
       res.status(200).json({
@@ -1740,7 +1741,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...metadata
       });
     } catch (error) {
-      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+      return errorResponse(res, 500, "Erro no servidor", error);
     }
   });
 
