@@ -44,26 +44,57 @@ const TestAdvancedVideo = () => {
   // Esta função configura imagens para o teste de vídeo
   const handleTestImages = () => {
     // Definimos o caminho absoluto para as imagens de teste
-    setImagePaths([
+    const testImages = [
       "uploads/test/image1.jpg",
       "uploads/test/image2.jpg", 
       "uploads/test/image3.jpg",
-    ]);
+    ];
+    
+    setImagePaths(testImages);
     
     toast({
       title: "Imagens de teste definidas",
       description: "Imagens carregadas do diretório de uploads/test",
     });
     
-    console.log("Imagens de teste definidas:", imagePaths);
+    console.log("Imagens de teste definidas:", testImages);
   };
 
   const handleCreateVideo = async () => {
     setLoading(true);
     setVideoUrl(null);
+    
+    // Mostrar toast informando o início do processo
+    toast({
+      title: "Iniciando criação do vídeo",
+      description: "Este processo pode levar alguns segundos, por favor aguarde...",
+    });
+
+    console.log("Configurações para criação de vídeo:", {
+      imagePaths,
+      outputFileName,
+      text,
+      duration,
+      transition,
+      transitionDuration,
+      textPosition,
+      textColor,
+      textAnimation,
+      zoomEffect,
+      colorGrading,
+      autoSubtitle,
+      watermark: watermark || undefined,
+      outputQuality,
+      social
+    });
 
     try {
       // Usar fetch diretamente para ter mais controle sobre a resposta
+      toast({
+        title: "Processando...",
+        description: "Enviando requisição para o servidor...",
+      });
+      
       const response = await fetch("/api/video/create-advanced", {
         method: "POST",
         headers: {
@@ -88,6 +119,11 @@ const TestAdvancedVideo = () => {
         }),
       });
 
+      toast({
+        title: "Recebendo resposta",
+        description: "Analisando resposta do servidor...",
+      });
+      
       const data = await response.json();
 
       if (response.ok && data.success) {

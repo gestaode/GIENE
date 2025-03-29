@@ -144,11 +144,18 @@ export class FFmpegService {
       
       // Create the content for the list file with durations
       let listContent = "";
+      console.log('Processing images for video creation:');
       for (const imagePath of imagePaths) {
-        listContent += `file '${imagePath}'\nduration ${duration}\n`;
+        // Escape single quotes in the path
+        const escapedPath = imagePath.replace(/'/g, "'\\''");
+        console.log(`- Using image: ${escapedPath}`);
+        listContent += `file '${escapedPath}'\nduration ${duration}\n`;
       }
       // Add the last image again (needed for the end)
-      listContent += `file '${imagePaths[imagePaths.length - 1]}'`;
+      if (imagePaths.length > 0) {
+        const lastImagePath = imagePaths[imagePaths.length - 1].replace(/'/g, "'\\''");
+        listContent += `file '${lastImagePath}'`;
+      }
       
       // Write the list file
       fs.writeFileSync(listFile, listContent);
@@ -495,8 +502,12 @@ export class FFmpegService {
       
       // Create the content for the list file
       let listContent = "";
+      console.log('Processing videos for combination:');
       for (const videoPath of videoPaths) {
-        listContent += `file '${videoPath}'\n`;
+        // Escape single quotes in the path
+        const escapedPath = videoPath.replace(/'/g, "'\\''");
+        console.log(`- Using video: ${escapedPath}`);
+        listContent += `file '${escapedPath}'\n`;
       }
       
       // Write the list file
