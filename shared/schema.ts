@@ -141,3 +141,18 @@ export type Analytics = typeof analytics.$inferSelect;
 
 export type InsertFormConfig = z.infer<typeof insertFormConfigSchema>;
 export type FormConfig = typeof formConfig.$inferSelect;
+
+// Voice schema
+export const voices = pgTable("voices", {
+  id: serial("id").primaryKey(),
+  voiceId: text("voice_id").notNull().unique(),
+  name: text("name").notNull(),
+  provider: text("provider").notNull(),
+  samples: text("samples").array(),
+  settings: json("settings"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertVoiceSchema = createInsertSchema(voices);
+export type InsertVoice = z.infer<typeof insertVoiceSchema>;
+export type Voice = typeof voices.$inferSelect;
