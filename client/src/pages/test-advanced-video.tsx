@@ -41,20 +41,21 @@ const TestAdvancedVideo = () => {
   const [outputQuality, setOutputQuality] = useState("high");
   const [social, setSocial] = useState("tiktok");
 
-  // Esta função simula imagens para o teste - na implementação real, seria necessário 
-  // usar imagens reais do sistema de arquivos
+  // Esta função configura imagens para o teste de vídeo
   const handleTestImages = () => {
-    // Simulamos imagens para teste
+    // Definimos o caminho absoluto para as imagens de teste
     setImagePaths([
-      "/uploads/test/image1.jpg",
-      "/uploads/test/image2.jpg",
-      "/uploads/test/image3.jpg",
+      "uploads/test/image1.jpg",
+      "uploads/test/image2.jpg", 
+      "uploads/test/image3.jpg",
     ]);
     
     toast({
       title: "Imagens de teste definidas",
-      description: "No ambiente real, você precisaria fazer upload de imagens reais",
+      description: "Imagens carregadas do diretório de uploads/test",
     });
+    
+    console.log("Imagens de teste definidas:", imagePaths);
   };
 
   const handleCreateVideo = async () => {

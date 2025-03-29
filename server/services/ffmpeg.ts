@@ -4,7 +4,11 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import ffmpegPath from "ffmpeg-static";
+import ffmpegStatic from "ffmpeg-static";
+
+// Garantir que temos o caminho do ffmpeg
+const ffmpegPath = ffmpegStatic;
+console.log("FFmpeg path:", ffmpegPath);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

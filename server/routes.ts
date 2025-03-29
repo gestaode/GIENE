@@ -1351,6 +1351,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rota para testar recursos avançados de vídeo
   app.post("/api/video/create-advanced", async (req: Request, res: Response) => {
     try {
+      console.log("Recebendo solicitação para criar vídeo avançado:", JSON.stringify(req.body));
+      
       const { 
         imagePaths, 
         outputFileName = `advanced_video_${Date.now()}.mp4`,
@@ -1382,8 +1384,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
       
+      // Verificando se as imagens existem no sistema e ajustando caminhos
+      const adjustedImagePaths = [];
+      for (const imgPath of imagePaths) {
+        // Remover qualquer '/' inicial para garantir caminhos relativos
+        const normalizedPath = imgPath.startsWith('/') ? imgPath.substring(1) : imgPath;
+        // Caminho absoluto em relação à raiz do projeto
+        const absolutePath = path.join(process.cwd(), normalizedPath);
+        
+        if (!fs.existsSync(absolutePath)) {
+          console.log(`Imagem não encontrada: ${absolutePath}`);
+          return res.status(400).json({
+            success: false,
+            message: `Imagem não encontrada: ${imgPath}`
+          });
+        } else {
+          console.log(`Imagem encontrada: ${absolutePath}`);
+          adjustedImagePaths.push(absolutePath);
+        }
+      }
+      
       const outputPath = await ffmpegService.createVideoFromImages({
-        imagePaths,
+        imagePaths: adjustedImagePaths,
         outputFileName,
         duration: typeof duration === 'string' ? parseFloat(duration) : duration,
         transition,
