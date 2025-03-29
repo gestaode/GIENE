@@ -58,9 +58,10 @@ export function MediaSelector({ onSelectMedia, script }: MediaSelectorProps) {
   // Generate speech mutation
   const { mutate: generateSpeech, isPending: isGeneratingSpeech } = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/tts/synthesize", {
+      const res = await apiRequest("POST", "/api/premium-brazilian-voice/synthesize", {
         text: voiceText,
-        ...voiceOptions
+        voice: voiceOptions.voiceName,
+        speed: voiceOptions.speakingRate
       });
       return res.json();
     },
@@ -68,7 +69,7 @@ export function MediaSelector({ onSelectMedia, script }: MediaSelectorProps) {
       setGeneratedAudio(data);
       toast({
         title: "Áudio gerado com sucesso",
-        description: "Áudio de narração gerado e pronto para uso no vídeo."
+        description: "Áudio de narração de alta qualidade em português brasileiro gerado com sucesso!"
       });
     },
     onError: (error) => {
@@ -318,9 +319,10 @@ export function MediaSelector({ onSelectMedia, script }: MediaSelectorProps) {
                       value={voiceOptions.voiceName}
                       onChange={(e) => setVoiceOptions({...voiceOptions, voiceName: e.target.value})}
                     >
-                      <option value="pt-BR-Standard-A">Feminina 1 (padrão)</option>
-                      <option value="pt-BR-Standard-B">Masculina 1</option>
-                      <option value="pt-BR-Standard-C">Feminina 2</option>
+                      <option value="Ricardo Autoritativo">Ricardo Autoritativo (Masculina)</option>
+                      <option value="Amanda Persuasiva">Amanda Persuasiva (Feminina)</option>
+                      <option value="Carlos Especialista">Carlos Especialista (Masculina)</option>
+                      <option value="Luciana Amigável">Luciana Amigável (Feminina)</option>
                     </select>
                   </div>
                   

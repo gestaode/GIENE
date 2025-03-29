@@ -26,6 +26,7 @@ import { FFmpegService } from "./services/ffmpeg";
 import { GoogleCloudTTSService } from "./services/google-cloud-tts";
 import { ResponsiveVoiceService } from "./services/responsive-voice";
 import { PremiumBrazilianVoiceService } from "./services/premium-brazilian-voice";
+import { ElevenLabsService } from "./services/elevenlabs";
 
 // Setup file storage paths
 const __filename = fileURLToPath(import.meta.url);
@@ -98,6 +99,8 @@ function initializeService(req: Request, serviceName: string) {
       return new FFmpegService();
     case 'premium_brazilian_voice':
       return new PremiumBrazilianVoiceService();
+    case 'elevenlabs':
+      return new ElevenLabsService(process.env.ELEVENLABS_API_KEY || '');
 
     default:
       throw new Error(`Unknown service: ${serviceName}`);
