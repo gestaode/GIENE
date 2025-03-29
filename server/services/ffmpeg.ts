@@ -239,7 +239,8 @@ export class FFmpegService {
         else if (textPosition === 'center') yPos = "(h-text_h)/2";
         
         // Seleção de fonte personalizada ou padrão
-        const fontFile = textFont || "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+        // Usa apenas textFont se fornecido - sem valor padrão que pode não existir no ambiente
+        const fontFile = textFont || "";
         
         // Define a animação de texto com base na seleção
         let textExpression = "";
@@ -262,7 +263,14 @@ export class FFmpegService {
         }
         
         // Texto com sombra e fundo, incluindo suporte para animações
-        filters.push(`drawtext=text='${textOverlay.replace(/'/g, "'\\\\''")}':fontfile='${fontFile}':fontsize=48:fontcolor=${textColor}${textExpression}:shadowcolor=black@0.5:shadowx=2:shadowy=2:box=1:boxcolor=black@0.4:boxborderw=10`);
+        let textFilter = `drawtext=text='${textOverlay.replace(/'/g, "'\\\\''")}':fontsize=48:fontcolor='${textColor}'${textExpression}:shadowcolor='black@0.5':shadowx=2:shadowy=2:box=1:boxcolor='black@0.4':boxborderw=10`;
+        
+        // Adiciona fontfile apenas se for fornecido
+        if (fontFile) {
+          textFilter = `drawtext=text='${textOverlay.replace(/'/g, "'\\\\''")}':fontfile='${fontFile}':fontsize=48:fontcolor='${textColor}'${textExpression}:shadowcolor='black@0.5':shadowx=2:shadowy=2:box=1:boxcolor='black@0.4':boxborderw=10`;
+        }
+        
+        filters.push(textFilter);
       }
       
       // Adiciona logo se fornecido com suporte a diferentes posições
@@ -290,7 +298,7 @@ export class FFmpegService {
       
       // Adiciona marca d'água se fornecida
       if (watermark) {
-        filters.push(`drawtext=text='${watermark.replace(/'/g, "'\\\\''")}':fontsize=24:fontcolor=white@0.5:x=(w-text_w)/2:y=(h-text_h-10)`);
+        filters.push(`drawtext=text='${watermark.replace(/'/g, "'\\\\''")}':fontsize=24:fontcolor='white@0.5':x=(w-text_w)/2:y=(h-text_h-10)`);
       }
       
       // Adiciona subtítulos de arquivo externo ou automaticamente gerados
@@ -571,16 +579,15 @@ export class FFmpegService {
         // Filtros de vídeo avançados: texto com fontes de alta qualidade, sombra, animações
         "-vf", `
           drawtext=text='${text.replace(/'/g, "'\\\\''")}':
-          fontcolor=white:
+          fontcolor='white':
           fontsize=72:
           x=(w-text_w)/2:
           y=(h-text_h)/2:
-          shadowcolor=black@0.5:
+          shadowcolor='black@0.5':
           shadowx=2:
           shadowy=2:
-          fontfile=/System/Library/Fonts/Helvetica.ttc:
           box=1:
-          boxcolor=black@0.4:
+          boxcolor='black@0.4':
           boxborderw=10,
           fade=in:0:30,
           fade=out:270:30
