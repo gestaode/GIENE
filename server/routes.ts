@@ -23,6 +23,7 @@ import { HuggingFaceService } from "./services/huggingface";
 import { MistralAIService } from "./services/mistral";
 import { FFmpegService } from "./services/ffmpeg";
 import { GoogleCloudTTSService } from "./services/google-cloud-tts";
+import { ResponsiveVoiceService } from "./services/responsive-voice";
 
 // Setup file storage paths
 const __filename = fileURLToPath(import.meta.url);
@@ -65,14 +66,26 @@ function initializeService(req: Request, serviceName: string) {
       return new GoogleCloudTTSService(process.env.GOOGLE_TTS_API_KEY || '');
     case 'openai_tts':
       return new OpenAITTSService(process.env.OPENAI_API_KEY || '');
+    case 'responsive_voice':
+      return new ResponsiveVoiceService();
     case 'gemini':
       return new GeminiService(process.env.GOOGLE_AI_API_KEY || '');
     case 'coqui_tts': {
       // Inicializa o serviço CoquiTTS
       const coquiService = new CoquiTTSService();
-      // Injeta o serviço Google Cloud TTS como fallback
-      const googleCloudTTS = new GoogleCloudTTSService(process.env.GOOGLE_TTS_API_KEY || '');
-      coquiService.setGoogleTTSService(googleCloudTTS);
+      
+      // Injeta o serviço OpenAI TTS como fallback primário
+      const openaiTTS = new OpenAITTSService(process.env.OPENAI_API_KEY || '');
+      coquiService.setOpenAITTSService(openaiTTS);
+      
+      // Injeta o serviço Google Cloud TTS como fallback secundário
+      const googleTTS = new GoogleCloudTTSService(process.env.GOOGLE_TTS_API_KEY || '');
+      coquiService.setGoogleTTSService(googleTTS);
+      
+      // Injeta o serviço ResponsiveVoice como último fallback
+      const responsiveVoice = new ResponsiveVoiceService();
+      coquiService.setResponsiveVoiceService(responsiveVoice);
+      
       return coquiService;
     }
     case 'huggingface':
@@ -81,6 +94,7 @@ function initializeService(req: Request, serviceName: string) {
       return new MistralAIService(process.env.MISTRAL_API_KEY || '');
     case 'ffmpeg':
       return new FFmpegService();
+
     default:
       throw new Error(`Unknown service: ${serviceName}`);
   }
@@ -857,6 +871,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
     }
   });
+  
+  // ResponsiveVoice API (Serviço TTS gratuito baseado em web)
+  app.post("/api/responsive-voice/synthesize", async (req: Request, res: Response) => {
+    try {
+      const {
+        text,
+        voice = "Brazilian Portuguese Female",
+        speed = 1
+      } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      const responsiveVoiceService = initializeService(req, 'responsive_voice') as ResponsiveVoiceService;
+      
+      const result = await responsiveVoiceService.synthesizeSpeech({
+        text,
+        voice,
+        speed
+      });
+      
+      res.status(200).json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  app.get("/api/responsive-voice/voices", async (req: Request, res: Response) => {
+    try {
+      const responsiveVoiceService = initializeService(req, 'responsive_voice') as ResponsiveVoiceService;
+      const voices = await responsiveVoiceService.getVoices();
+      res.status(200).json(voices);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // TTS-JS routes removidas para simplificar a implementação
 
   // 6.4 FFmpeg video generation
   app.post("/api/video/create-from-images", upload.array("images"), async (req: Request, res: Response) => {

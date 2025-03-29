@@ -58,82 +58,147 @@ export class CoquiTTSService {
   ];
   
   // Mapeamento entre vozes Coqui e OpenAI TTS
-  private voiceMapping: Record<string, string> = {
-    "default": "nova", 
-    "tts_models/pt/cv/vits": "alloy", 
-    "tts_models/multilingual/multi-dataset/your_tts": "echo",
-    "tts_models/en/ljspeech/tacotron2-DDC": "fable", 
-    "tts_models/en/ljspeech/glow-tts": "onyx", 
-    "tts_models/en/ljspeech/speedy-speech": "shimmer", 
-    "tts_models/en/ljspeech/vits": "nova", 
+  private voiceMapping: Record<string, { name: string, languageCode: string }> = {
+    "default": { name: "nova", languageCode: "pt-BR" }, 
+    "tts_models/pt/cv/vits": { name: "alloy", languageCode: "pt-BR" }, 
+    "tts_models/multilingual/multi-dataset/your_tts": { name: "echo", languageCode: "pt-BR" },
+    "tts_models/en/ljspeech/tacotron2-DDC": { name: "fable", languageCode: "en-US" }, 
+    "tts_models/en/ljspeech/glow-tts": { name: "onyx", languageCode: "en-US" }, 
+    "tts_models/en/ljspeech/speedy-speech": { name: "shimmer", languageCode: "en-US" }, 
+    "tts_models/en/ljspeech/vits": { name: "nova", languageCode: "en-US" }, 
     // Mapeamento para as vozes do Google Cloud TTS originais
-    "pt-BR-Standard-A": "nova",
-    "pt-BR-Standard-B": "echo",
-    "pt-BR-Standard-C": "alloy",
-    "pt-BR-Wavenet-A": "shimmer",
-    "pt-BR-Wavenet-B": "onyx",
-    "pt-BR-Wavenet-C": "fable",
-    "en-US-Standard-A": "echo",
-    "en-US-Standard-B": "onyx",
-    "en-US-Standard-C": "nova",
-    "en-US-Standard-D": "echo",
-    "en-US-Standard-E": "alloy",
-    "en-US-Standard-F": "fable",
-    "en-US-Standard-G": "shimmer",
+    "pt-BR-Standard-A": { name: "nova", languageCode: "pt-BR" },
+    "pt-BR-Standard-B": { name: "echo", languageCode: "pt-BR" },
+    "pt-BR-Standard-C": { name: "alloy", languageCode: "pt-BR" },
+    "pt-BR-Wavenet-A": { name: "shimmer", languageCode: "pt-BR" },
+    "pt-BR-Wavenet-B": { name: "onyx", languageCode: "pt-BR" },
+    "pt-BR-Wavenet-C": { name: "fable", languageCode: "pt-BR" },
+    "en-US-Standard-A": { name: "echo", languageCode: "en-US" },
+    "en-US-Standard-B": { name: "onyx", languageCode: "en-US" },
+    "en-US-Standard-C": { name: "nova", languageCode: "en-US" },
+    "en-US-Standard-D": { name: "echo", languageCode: "en-US" },
+    "en-US-Standard-E": { name: "alloy", languageCode: "en-US" },
+    "en-US-Standard-F": { name: "fable", languageCode: "en-US" },
+    "en-US-Standard-G": { name: "shimmer", languageCode: "en-US" },
   };
   
   private openaiTTSService: any;
+  private googleTTSService: any;
+  private responsiveVoiceService: any;
   
   constructor() {
-    // Nota: O serviço real será injetado no método initializeService em routes.ts
+    // Nota: Os serviços reais serão injetados no método initializeService em routes.ts
     this.openaiTTSService = null;
+    this.googleTTSService = null;
+    this.responsiveVoiceService = null;
   }
 
   setOpenAITTSService(service: any) {
     this.openaiTTSService = service;
   }
+  
+  setGoogleTTSService(service: any) {
+    this.googleTTSService = service;
+  }
+  
+  setResponsiveVoiceService(service: any) {
+    this.responsiveVoiceService = service;
+  }
+  
+  // Método removido
 
   /**
-   * Generate audio from text using alternative Text-to-Speech (OpenAI)
+   * Generate audio from text using multiple Text-to-Speech services with fallback
    */
   async synthesizeSpeech(options: TTSOptions): Promise<TTSResponse> {
-    try {
-      const {
-        text,
-        voice = "default",
-        speed = 1.0,
-      } = options;
+    const {
+      text,
+      voice = "default",
+      speed = 1.0,
+    } = options;
 
-      log(`Synthesizing speech with OpenAI TTS: "${text.substring(0, 30)}..."`, 'tts');
-      
-      if (!this.openaiTTSService) {
-        throw new Error("OpenAI TTS service not initialized. Please check API key configuration.");
+    // Lista de erros encontrados para diagnóstico
+    const errors: string[] = [];
+
+    // 1. Tenta primeiro com o serviço OpenAI TTS (se disponível)
+    if (this.openaiTTSService) {
+      try {
+        log(`Tentando sintetizar voz com OpenAI TTS: "${text.substring(0, 30)}..."`, 'tts');
+        
+        // Mapeie para a voz correspondente do OpenAI
+        const openaiVoice = this.getOpenAIVoice(voice);
+        
+        // Use o serviço OpenAI TTS
+        const result = await this.openaiTTSService.synthesizeSpeech({
+          text,
+          voice: openaiVoice,
+          speed,
+        });
+
+        return result;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log(`Erro ao sintetizar voz com OpenAI TTS: ${errorMessage}`, 'tts');
+        errors.push(`OpenAI TTS: ${errorMessage}`);
       }
-
-      // Mapeie para a voz correspondente do OpenAI
-      const openaiVoice = this.getOpenAIVoice(voice);
-      
-      // Use o serviço OpenAI TTS
-      const result = await this.openaiTTSService.synthesizeSpeech({
-        text,
-        voice: openaiVoice,
-        speed,
-      });
-
-      return result;
-    } catch (error) {
-      log(`Error synthesizing speech with OpenAI TTS: ${error instanceof Error ? error.message : String(error)}`, 'tts');
-      
-      // Em caso de erro, criamos uma resposta simulada em vez de falhar completamente
-      // Isto é apenas um fallback para evitar a quebra da aplicação
-      const timestamp = new Date().getTime();
-      const uniqueId = nanoid(8);
-      const fileName = `fallback_${timestamp}_${uniqueId}.mp3`;
-      const filePath = path.join(OUTPUT_DIR, fileName);
-      
-      // Em ambiente de produção, devemos lançar o erro
-      throw error;
     }
+
+    // 2. Se OpenAI falhar, tenta com o serviço Google TTS (se disponível)
+    if (this.googleTTSService) {
+      try {
+        log(`Tentando sintetizar voz com Google Cloud TTS: "${text.substring(0, 30)}..."`, 'tts');
+        
+        // Obtenha a voz e código de idioma para o Google TTS
+        const { name: voiceName, languageCode } = this.getGoogleVoiceByName(voice);
+        
+        // Use o serviço Google Cloud TTS
+        const result = await this.googleTTSService.synthesizeSpeech({
+          text,
+          voiceName,
+          languageCode,
+          speakingRate: speed,
+        });
+
+        return result;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log(`Erro ao sintetizar voz com Google Cloud TTS: ${errorMessage}`, 'tts');
+        errors.push(`Google Cloud TTS: ${errorMessage}`);
+      }
+    }
+
+    // Nota: TTS-JS foi removido da cadeia de fallback
+
+    // 4. Se os anteriores falharem, tenta com o ResponsiveVoice (Google Translate)
+    if (this.responsiveVoiceService) {
+      try {
+        log(`Tentando sintetizar voz com ResponsiveVoice: "${text.substring(0, 30)}..."`, 'tts');
+        
+        // Mapeie a voz para uma compatível com o ResponsiveVoice
+        let responsiveVoiceName = "Brazilian Portuguese Female";
+        if (voice.includes("Male") || voice.includes("male")) {
+          responsiveVoiceName = "Brazilian Portuguese Male";
+        }
+        
+        // Use o serviço ResponsiveVoice
+        const result = await this.responsiveVoiceService.synthesizeSpeech({
+          text,
+          voice: responsiveVoiceName,
+          speed,
+        });
+
+        return result;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        log(`Erro ao sintetizar voz com ResponsiveVoice: ${errorMessage}`, 'tts');
+        errors.push(`ResponsiveVoice: ${errorMessage}`);
+      }
+    }
+
+    // 5. Se todos os serviços falharem, gera um erro detalhado
+    const errorMessage = `Não foi possível sintetizar a voz com nenhum dos serviços disponíveis: ${errors.join("; ")}`;
+    log(errorMessage, 'tts');
+    throw new Error(errorMessage);
   }
 
   /**
@@ -147,6 +212,19 @@ export class CoquiTTSService {
       log(`Error getting TTS voices: ${error instanceof Error ? error.message : String(error)}`, 'tts');
       throw error;
     }
+  }
+
+  /**
+   * Helper to map voice name to OpenAI TTS voice
+   */
+  private getOpenAIVoice(voiceName: string): string {
+    // Verifica se temos um mapeamento para esta voz
+    if (this.voiceMapping[voiceName]) {
+      return this.voiceMapping[voiceName].name;
+    }
+    
+    // Caso contrário, usamos a voz padrão
+    return "nova";
   }
 
   /**

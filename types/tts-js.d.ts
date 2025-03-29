@@ -1,5 +1,5 @@
 declare module 'tts-js' {
-  export class TTS {
+  class TTS {
     constructor();
 
     speak(options: {
@@ -11,4 +11,7 @@ declare module 'tts-js' {
       audioStream: unknown;
     }>;
   }
+  
+  // Exportação padrão
+  export default TTS;
 }
