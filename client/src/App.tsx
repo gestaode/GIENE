@@ -11,6 +11,7 @@ import Schedule from "@/pages/schedule";
 import Leads from "@/pages/leads";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
+import TestAdvancedVideo from "@/pages/test-advanced-video";
 
 function MainLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -72,6 +73,13 @@ function Router() {
         {() => (
           <MainLayout>
             <Settings />
+          </MainLayout>
+        )}
+      </Route>
+      <Route path="/test-advanced-video">
+        {() => (
+          <MainLayout>
+            <TestAdvancedVideo />
           </MainLayout>
         )}
       </Route>

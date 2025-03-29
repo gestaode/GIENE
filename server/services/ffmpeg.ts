@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import ffmpegPath from "ffmpeg-static";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -708,7 +709,13 @@ export class FFmpegService {
    */
   private executeFFmpegCommand(args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const ffmpeg = spawn("ffmpeg", args);
+      // Utilize o pacote ffmpeg-static para maior compatibilidade
+      if (!ffmpegPath) {
+        reject(new Error("FFmpeg path not found. Please install ffmpeg-static package."));
+        return;
+      }
+      
+      const ffmpeg = spawn(ffmpegPath, args);
       
       let stderrData = "";
       
@@ -716,6 +723,10 @@ export class FFmpegService {
         stderrData += data.toString();
         // Log progress for debugging
         log(data.toString().trim(), 'ffmpeg');
+      });
+      
+      ffmpeg.on("error", (err) => {
+        reject(new Error(`Failed to start FFmpeg process: ${err.message}`));
       });
       
       ffmpeg.on("close", (code) => {

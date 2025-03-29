@@ -12,7 +12,8 @@ import {
   Settings,
   Menu,
   X,
-  Video
+  Video,
+  TestTube
 } from "lucide-react";
 
 type NavItem = {
@@ -60,6 +61,11 @@ export function Sidebar() {
       href: "/settings",
       label: "Configurações",
       icon: <Settings size={20} />,
+    },
+    {
+      href: "/test-advanced-video",
+      label: "Teste Avançado",
+      icon: <TestTube size={20} />,
     },
   ];
   

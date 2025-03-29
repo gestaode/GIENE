@@ -1347,6 +1347,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
     }
   });
+  
+  // Rota para testar recursos avançados de vídeo
+  app.post("/api/video/create-advanced", async (req: Request, res: Response) => {
+    try {
+      const { 
+        imagePaths, 
+        outputFileName = `advanced_video_${Date.now()}.mp4`,
+        text,
+        duration = 3,
+        transition = "fade",
+        transitionDuration = 0.5,
+        textPosition = "bottom",
+        textColor = "white",
+        textFont,
+        textAnimation = "none",
+        logo,
+        logoPosition = "top-right",
+        zoomEffect = true,
+        colorGrading = "vibrant",
+        audioPath,
+        autoSubtitle = false,
+        watermark,
+        outputQuality = "high",
+        social = "tiktok"
+      } = req.body;
+      
+      if (!imagePaths || !Array.isArray(imagePaths) || imagePaths.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Pelo menos uma imagem é necessária" 
+        });
+      }
+      
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
+      const outputPath = await ffmpegService.createVideoFromImages({
+        imagePaths,
+        outputFileName,
+        duration: typeof duration === 'string' ? parseFloat(duration) : duration,
+        transition,
+        transitionDuration: typeof transitionDuration === 'string' ? parseFloat(transitionDuration) : transitionDuration,
+        width: 1080,
+        height: 1920,
+        textOverlay: text,
+        textPosition,
+        textColor,
+        textFont,
+        textAnimation,
+        logo,
+        logoPosition,
+        fps: 30,
+        zoomEffect: zoomEffect === 'true' || zoomEffect === true,
+        colorGrading,
+        audioPath,
+        autoSubtitle: autoSubtitle === 'true' || autoSubtitle === true,
+        watermark,
+        outputQuality,
+        social
+      });
+      
+      // Get video metadata
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      res.status(200).json({
+        success: true,
+        filePath: outputPath,
+        fileName: path.basename(outputPath),
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        details: {
+          transition,
+          colorGrading,
+          textAnimation,
+          outputQuality,
+          social
+        },
+        ...metadata
+      });
+    } catch (error) {
+      console.error(`Error creating advanced video: ${error}`);
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   // Endpoint para combinar vídeos a partir de URLs
   app.post("/api/video/combine-videos-from-urls", async (req: Request, res: Response) => {
