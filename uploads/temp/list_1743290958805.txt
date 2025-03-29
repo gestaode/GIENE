@@ -1,0 +1,5 @@
+file '/home/runner/workspace/uploads/images/test-image.png'
+duration 2
+file '/home/runner/workspace/uploads/images/test-image2.png'
+duration 2
+file '/home/runner/workspace/uploads/images/test-image2.png'

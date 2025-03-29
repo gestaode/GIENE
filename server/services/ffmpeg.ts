@@ -301,16 +301,12 @@ export class FFmpegService {
         if (textPosition === 'top') yPos = "25";
         else if (textPosition === 'center') yPos = "(h-text_h)/2";
         
-        // Seleção de fonte personalizada ou padrão
-        // Usa apenas textFont se fornecido - sem valor padrão que pode não existir no ambiente
-        const fontFile = textFont || "";
-        
         // Define a animação de texto com base na seleção
         let textExpression = "";
         switch (textAnimation) {
           case 'typewriter':
             // Efeito de digitação, revela o texto caractere por caractere
-            textExpression = `:enable='between(t,0,${duration})':x=(w-text_w)/2:y=${yPos}:fontcolor_expr=alpha('${textColor}', min(1, (t*3)))`;
+            textExpression = `:enable='between(t,0,${duration})':x=(w-text_w)/2:y=${yPos}:fontcolor_expr=alpha('${textColor}',min(1,(t*3)))`;
             break;
           case 'fadein':
             // Efeito de fade in para o texto
@@ -318,7 +314,7 @@ export class FFmpegService {
             break;
           case 'slidein':
             // Efeito de deslize para o texto
-            textExpression = `:enable='between(t,0,${duration})':x='min((w-text_w)/2, w*t/2)':y=${yPos}`;
+            textExpression = `:enable='between(t,0,${duration})':x='min((w-text_w)/2,w*t/2)':y=${yPos}`;
             break;
           default:
             // Sem animação, texto estático
@@ -327,7 +323,6 @@ export class FFmpegService {
         
         // Simplifica e corrige o processo de texto para evitar erros de processamento
         // Garantimos que o texto seja curto e escape especial caracteres
-        // e usamos opções do filtro escrita da forma mais compatível
         let safeText = "VideoGenie"; // Texto padrão seguro
         
         if (textOverlay && typeof textOverlay === 'string') {
@@ -337,6 +332,11 @@ export class FFmpegService {
             .replace(/'/g, "") 
             .replace(/[^\w\s.,!?]/g, "")  // Remove caracteres especiais
             .substring(0, 50); // Limita a 50 caracteres
+            
+          // Garantir que o texto termine com um ponto final para evitar erros de parsing
+          if (!safeText.endsWith('.')) {
+            safeText += '.';
+          }
         }
         
         // Converte a cor para um formato que o FFmpeg aceita
@@ -351,10 +351,9 @@ export class FFmpegService {
           }
         }
         
-        // Aplica o filtro de texto com todas as precauções
-        const textFilter = `drawtext=text='${safeText}':fontsize=48:fontcolor=${safeColor}${textExpression}:shadowcolor=black@0.5:shadowx=2:shadowy=2:box=1:boxcolor=black@0.4:boxborderw=10`;
-        
-        filters.push(textFilter);
+        // Aplica um filtro de texto simplificado para evitar erros de parsing no FFmpeg
+        // Removemos todas as opções avançadas como sombras, caixas, etc.
+        filters.push(`drawtext=text='${safeText}':fontsize=48:fontcolor=${safeColor}:x=(w-text_w)/2:y=${yPos}`);
       }
       
       // Adiciona logo se fornecido com suporte a diferentes posições
@@ -377,10 +376,11 @@ export class FFmpegService {
             overlayPos = "W-w-10:10"; // Padrão: canto superior direito
         }
         
-        filters.push(`movie=${logo}[watermark];[v][watermark]overlay=${overlayPos}`);
+        // Adiciona o filtro de overlay mais simples para evitar erros de parsing
+        filters.push(`movie=${logo},scale=150:-1 [wm];[0:v][wm] overlay=${overlayPos}`);
       }
       
-      // Adiciona marca d'água se fornecida
+      // Adiciona marca d'água se fornecida - em um filtro separado
       if (watermark && typeof watermark === 'string' && watermark.trim().length > 0) {
         // Sanitiza a marca d'água para evitar problemas com o FFmpeg
         const safeWatermark = watermark
@@ -388,7 +388,8 @@ export class FFmpegService {
           .replace(/[^\w\s.,!?]/g, "")
           .substring(0, 20); // Limita a 20 caracteres
           
-        filters.push(`drawtext=text='${safeWatermark}':fontsize=24:fontcolor=white@0.5:x=(w-text_w)/2:y=(h-text_h-10)`);
+        // Adiciona marca d'água como um filtro simples separado
+        filters.push(`drawtext=text='${safeWatermark}':fontsize=24:fontcolor=white:x=(w-text_w)/2:y=h-30`);
       }
       
       // Adiciona subtítulos de arquivo externo ou automaticamente gerados
@@ -400,8 +401,9 @@ export class FFmpegService {
         filters.push(`subtitles=${subtitlePath}`);
       }
       
-      // Finaliza com fade in/out
-      filters.push("fade=in:0:30,fade=out:st=" + (imagePaths.length * duration - 1) + ":d=1");
+      // Adiciona apenas fade in para evitar erros de cálculo com fade out
+      // O cálculo fade=out:st= pode falhar se a duração total for calculada incorretamente
+      filters.push("fade=in:0:30");
       
       // Determina o preset de qualidade com base na opção selecionada
       let preset = "medium";
@@ -534,45 +536,69 @@ export class FFmpegService {
     } = options;
 
     try {
+      console.log(`Adicionando áudio ao vídeo: 
+        - Vídeo: ${videoPath}
+        - Áudio: ${audioPath}
+        - Loop: ${loop}
+        - Output: ${outputFileName}
+      `);
+      
+      // Verificar se os arquivos existem e são acessíveis
+      if (!fs.existsSync(videoPath)) {
+        throw new Error(`Arquivo de vídeo não encontrado: ${videoPath}`);
+      }
+      
+      if (!fs.existsSync(audioPath)) {
+        throw new Error(`Arquivo de áudio não encontrado: ${audioPath}`);
+      }
+      
+      // Certifique-se de que o diretório de saída existe
+      if (!fs.existsSync(OUTPUT_DIR)) {
+        fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+        console.log(`Diretório criado: ${OUTPUT_DIR}`);
+      }
+      
       const outputPath = path.join(OUTPUT_DIR, outputFileName);
       
-      // Get video duration
+      // Usando duração fixa já que o getVideoMetadata não depende do ffprobe
       const videoMetadata = await this.getVideoMetadata(videoPath);
+      console.log(`Metadata do vídeo:`, videoMetadata);
       
-      // Execute FFmpeg command com alta qualidade de áudio
+      // Construir o comando ffmpeg com argumentos simplificados para maior compatibilidade
+      // Isso evita problemas com normalização complexa e filtros que podem falhar
       const ffmpegArgs = [
         "-i", videoPath,
         "-i", audioPath,
-        "-c:v", "copy", // Mantém o vídeo inalterado
-        "-c:a", "aac", // Codec de áudio AAC (boa qualidade e compatibilidade)
-        "-b:a", "192k", // Bitrate de áudio aumentado para 192kbps (qualidade superior)
-        "-ar", "48000", // Taxa de amostragem de 48kHz (padrão para vídeo profissional)
-        "-af", "dynaudnorm=f=150:g=15", // Normalização dinâmica de áudio para nivelamento
-        "-map", "0:v:0", // Pega a primeira stream de vídeo
-        "-map", "1:a:0", // Pega a primeira stream de áudio
+        "-c:v", "copy",      // Manter o vídeo original sem recodificação
+        "-c:a", "aac",       // Converter áudio para AAC (maior compatibilidade)
+        "-b:a", "192k"       // Bitrate de áudio de boa qualidade
       ];
       
-      // Se loop for true, atualizamos os filtros de áudio para incluir também o loop
+      // Apenas ativar o loop se especificado, de forma simplificada
       if (loop) {
-        // Removemos o filtro dynaudnorm anterior (índice 11 e 12 no array)
-        ffmpegArgs.splice(11, 2);
-        
-        // Adicionamos um filtro combinado
-        ffmpegArgs.push(
-          "-af", `aloop=loop=-1:size=2e+09,atrim=duration=${videoMetadata.duration},dynaudnorm=f=150:g=15`
-        );
+        // Uma abordagem mais simples e confiável para fazer o loop do áudio
+        // A duração já está definida pelo parâmetro -shortest abaixo
+        ffmpegArgs.push("-af", "aloop=loop=-1:size=2e+09");
       }
       
+      // Finalizar com o caminho de saída e garantir que o mais curto (áudio ou vídeo) determina o final
       ffmpegArgs.push(
-        "-shortest",
-        "-y", outputPath
+        "-shortest",         // Terminar quando o mais curto dos streams terminar
+        "-y",                // Sobrescrever arquivo existente se necessário
+        outputPath           // Caminho do arquivo de saída
       );
       
+      console.log("Executando comando FFmpeg:", ffmpegArgs.join(' '));
+      
+      // Executar o comando e aguardar a conclusão
       await this.executeFFmpegCommand(ffmpegArgs);
       
+      console.log(`Áudio adicionado com sucesso. Arquivo salvo em: ${outputPath}`);
       return outputPath;
     } catch (error) {
-      log(`Error adding audio to video: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Erro ao adicionar áudio ao vídeo: ${errorMessage}`);
+      log(`Error adding audio to video: ${errorMessage}`, 'ffmpeg');
       throw error;
     }
   }

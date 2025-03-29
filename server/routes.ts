@@ -1263,25 +1263,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.mkdirSync(tempDir, { recursive: true });
       }
       
-      // Baixa o vídeo
-      const videoResponse = await fetch(videoUrl);
-      if (!videoResponse.ok) {
-        throw new Error(`Failed to fetch video from ${videoUrl}`);
+      // Determinar se videoUrl é um caminho local ou uma URL remota
+      let videoPath: string;
+      if (videoUrl.startsWith('http')) {
+        // É uma URL remota, faz o download
+        try {
+          const videoResponse = await fetch(videoUrl);
+          if (!videoResponse.ok) {
+            throw new Error(`Failed to fetch video from ${videoUrl}`);
+          }
+          const videoBuffer = await videoResponse.arrayBuffer();
+          const videoExtension = videoUrl.split('.').pop() || 'mp4';
+          videoPath = path.join(tempDir, `video_${Date.now()}.${videoExtension}`);
+          fs.writeFileSync(videoPath, Buffer.from(videoBuffer));
+        } catch (error) {
+          console.error("Error downloading video:", error);
+          return res.status(500).json({ message: "Server error", error: `Failed to download video: ${error instanceof Error ? error.message : String(error)}` });
+        }
+      } else {
+        // É um caminho local, verifica se existe e retira a barra inicial se houver
+        const localPath = videoUrl.startsWith('/') ? videoUrl.substring(1) : videoUrl;
+        videoPath = path.join(process.cwd(), localPath);
+        
+        if (!fs.existsSync(videoPath)) {
+          return res.status(400).json({ message: "Video file not found", error: `Cannot find video at path: ${videoPath}` });
+        }
       }
-      const videoBuffer = await videoResponse.arrayBuffer();
-      const videoExtension = videoUrl.split('.').pop() || 'mp4';
-      const videoPath = path.join(tempDir, `video_${Date.now()}.${videoExtension}`);
-      fs.writeFileSync(videoPath, Buffer.from(videoBuffer));
       
-      // Baixa o áudio
-      const audioResponse = await fetch(audioUrl);
-      if (!audioResponse.ok) {
-        throw new Error(`Failed to fetch audio from ${audioUrl}`);
+      // Determinar se audioUrl é um caminho local ou uma URL remota
+      let audioPath: string;
+      if (audioUrl.startsWith('http')) {
+        // É uma URL remota, faz o download
+        try {
+          const audioResponse = await fetch(audioUrl);
+          if (!audioResponse.ok) {
+            throw new Error(`Failed to fetch audio from ${audioUrl}`);
+          }
+          const audioBuffer = await audioResponse.arrayBuffer();
+          const audioExtension = audioUrl.split('.').pop() || 'mp3';
+          audioPath = path.join(tempDir, `audio_${Date.now()}.${audioExtension}`);
+          fs.writeFileSync(audioPath, Buffer.from(audioBuffer));
+        } catch (error) {
+          console.error("Error downloading audio:", error);
+          return res.status(500).json({ message: "Server error", error: `Failed to download audio: ${error instanceof Error ? error.message : String(error)}` });
+        }
+      } else {
+        // É um caminho local, verifica se existe e retira a barra inicial se houver
+        const localPath = audioUrl.startsWith('/') ? audioUrl.substring(1) : audioUrl;
+        audioPath = path.join(process.cwd(), localPath);
+        
+        if (!fs.existsSync(audioPath)) {
+          return res.status(400).json({ message: "Audio file not found", error: `Cannot find audio at path: ${audioPath}` });
+        }
       }
-      const audioBuffer = await audioResponse.arrayBuffer();
-      const audioExtension = audioUrl.split('.').pop() || 'mp3';
-      const audioPath = path.join(tempDir, `audio_${Date.now()}.${audioExtension}`);
-      fs.writeFileSync(audioPath, Buffer.from(audioBuffer));
       
       // Processa a combinação
       const outputPath = await ffmpegService.addAudioToVideo({
@@ -1341,6 +1375,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // Endpoint simples para adicionar áudio a um vídeo existente usando caminhos de arquivo
+  app.post("/api/video/add-audio-by-path", async (req: Request, res: Response) => {
+    try {
+      console.log("Recebendo solicitação para adicionar áudio ao vídeo:", req.body);
+      
+      const {
+        videoPath,
+        audioPath,
+        outputFileName = `video_with_audio_${Date.now()}.mp4`,
+        loop = true
+      } = req.body;
+      
+      if (!videoPath || !audioPath) {
+        return res.status(400).json({ message: "Video path and audio path are required" });
+      }
+      
+      console.log("Inicializando FFmpegService...");
+      const ffmpegService = new FFmpegService();
+      console.log("FFmpegService inicializado com sucesso");
+      
+      // Verificar se os arquivos existem
+      const fullVideoPath = path.join(process.cwd(), videoPath.startsWith('/') ? videoPath.substring(1) : videoPath);
+      const fullAudioPath = path.join(process.cwd(), audioPath.startsWith('/') ? audioPath.substring(1) : audioPath);
+      
+      if (!fs.existsSync(fullVideoPath)) {
+        return res.status(400).json({ message: "Video file not found", error: `Cannot find video at path: ${fullVideoPath}` });
+      }
+      
+      if (!fs.existsSync(fullAudioPath)) {
+        return res.status(400).json({ message: "Audio file not found", error: `Cannot find audio at path: ${fullAudioPath}` });
+      }
+      
+      // Processa a combinação
+      const outputPath = await ffmpegService.addAudioToVideo({
+        videoPath: fullVideoPath,
+        audioPath: fullAudioPath,
+        outputFileName,
+        loop: typeof loop === 'string' ? loop === 'true' : loop
+      });
+      
+      // Get video metadata
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      res.status(200).json({
+        success: true,
+        filePath: outputPath,
+        fileName: path.basename(outputPath),
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        ...metadata
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false,
+        message: "Server error", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
   
