@@ -450,6 +450,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         keywords,
         additionalInstructions
       } = req.body;
+
+      let script;
+      try {
+        const openaiService = initializeService(req, 'openai') as OpenAIService;
+        script = await openaiService.generateVideoScript({
+          theme,
+          targetAudience,
+          duration,
+          tone,
+          keywords,
+          additionalInstructions
+        });
+      } catch (error) {
+        // Fallback para Gemini se OpenAI falhar
+        const geminiService = initializeService(req, 'gemini') as GeminiService;
+        script = await geminiService.generateVideoScript({
+          theme,
+          targetAudience,
+          duration,
+          tone,
+          keywords,
+          additionalInstructions
+        });
+      }
       
       if (!theme) {
         return res.status(400).json({ message: "Theme is required" });
