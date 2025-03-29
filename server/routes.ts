@@ -457,7 +457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const openaiService = initializeService(req, 'openai') as OpenAIService;
       
-      const generatedScript = await openaiService.generateVideoScript({
+      const script = await openaiService.generateVideoScript({
         theme,
         targetAudience,
         duration,
@@ -466,7 +466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         additionalInstructions
       });
       
-      res.status(200).json(generatedScript);
+      res.status(200).json(script);
     } catch (error) {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
     }
