@@ -17,6 +17,9 @@ import { PexelsService } from "./services/pexels";
 import { OpenAIService } from "./services/openai";
 import { GoogleTTSService } from "./services/tts";
 import { OpenAITTSService } from "./services/openai-tts";
+import { GeminiService } from "./services/gemini";
+import { CoquiTTSService } from "./services/coqui-tts";
+import { HuggingFaceService } from "./services/huggingface";
 import { FFmpegService } from "./services/ffmpeg";
 
 // Setup file storage paths
@@ -58,6 +61,12 @@ function initializeService(req: Request, serviceName: string) {
       return new GoogleTTSService(process.env.GOOGLE_TTS_API_KEY || '');
     case 'openai_tts':
       return new OpenAITTSService(process.env.OPENAI_API_KEY || '');
+    case 'gemini':
+      return new GeminiService(process.env.GOOGLE_AI_API_KEY || '');
+    case 'coqui_tts':
+      return new CoquiTTSService();
+    case 'huggingface':
+      return new HuggingFaceService(process.env.HUGGINGFACE_API_KEY);
     case 'ffmpeg':
       return new FFmpegService();
     default:
@@ -173,6 +182,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message = isValid ? "OpenAI API connection successful" : "Invalid OpenAI API key";
           } catch (error) {
             message = "Failed to connect to OpenAI API";
+          }
+          break;
+        
+        case 'gemini':
+          try {
+            const geminiService = new GeminiService(apiKey);
+            const result = await geminiService.suggestTrendingTopics("test", 1);
+            isValid = Array.isArray(result) && result.length > 0;
+            message = isValid ? "Google Gemini API connection successful" : "Invalid Google Gemini API key";
+          } catch (error) {
+            message = "Failed to connect to Google Gemini API";
+          }
+          break;
+          
+        case 'huggingface':
+          try {
+            const huggingfaceService = new HuggingFaceService(apiKey);
+            const result = await huggingfaceService.suggestTrendingTopics("test", 1);
+            isValid = Array.isArray(result) && result.length > 0;
+            message = isValid ? "HuggingFace API connection successful" : "Invalid HuggingFace API key";
+          } catch (error) {
+            message = "Failed to connect to HuggingFace API";
           }
           break;
         
@@ -436,6 +467,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
     }
   });
+  
+  // 6.2.1 Gemini AI API (Free alternative to OpenAI)
+  app.post("/api/gemini/generate-script", async (req: Request, res: Response) => {
+    try {
+      const {
+        theme,
+        targetAudience,
+        duration,
+        tone,
+        keywords,
+        additionalInstructions
+      } = req.body;
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme is required" });
+      }
+      
+      const geminiService = initializeService(req, 'gemini') as GeminiService;
+      
+      const script = await geminiService.generateVideoScript({
+        theme,
+        targetAudience,
+        duration,
+        tone,
+        keywords,
+        additionalInstructions
+      });
+      
+      res.status(200).json(script);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/gemini/generate-content", async (req: Request, res: Response) => {
+    try {
+      const { videoScript, options } = req.body;
+      
+      if (!videoScript) {
+        return res.status(400).json({ message: "Video script is required" });
+      }
+      
+      const geminiService = initializeService(req, 'gemini') as GeminiService;
+      
+      const content = await geminiService.generateSocialMediaContent(videoScript, options);
+      
+      res.status(200).json(content);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/gemini/trending-topics", async (req: Request, res: Response) => {
+    try {
+      const theme = req.query.theme as string;
+      const count = parseInt(req.query.count as string || '5');
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme parameter is required" });
+      }
+      
+      const geminiService = initializeService(req, 'gemini') as GeminiService;
+      
+      const topics = await geminiService.suggestTrendingTopics(theme, count);
+      
+      res.status(200).json(topics);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // 6.2.2 HuggingFace API (Free alternative to OpenAI)
+  app.post("/api/huggingface/generate-script", async (req: Request, res: Response) => {
+    try {
+      const {
+        theme,
+        targetAudience,
+        duration,
+        tone,
+        keywords,
+        additionalInstructions
+      } = req.body;
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme is required" });
+      }
+      
+      const huggingfaceService = initializeService(req, 'huggingface') as HuggingFaceService;
+      
+      const script = await huggingfaceService.generateVideoScript({
+        theme,
+        targetAudience,
+        duration,
+        tone,
+        keywords,
+        additionalInstructions
+      });
+      
+      res.status(200).json(script);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/api/huggingface/generate-content", async (req: Request, res: Response) => {
+    try {
+      const { videoScript, options } = req.body;
+      
+      if (!videoScript) {
+        return res.status(400).json({ message: "Video script is required" });
+      }
+      
+      const huggingfaceService = initializeService(req, 'huggingface') as HuggingFaceService;
+      
+      const content = await huggingfaceService.generateSocialMediaContent(videoScript, options);
+      
+      res.status(200).json(content);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/huggingface/trending-topics", async (req: Request, res: Response) => {
+    try {
+      const theme = req.query.theme as string;
+      const count = parseInt(req.query.count as string || '5');
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme parameter is required" });
+      }
+      
+      const huggingfaceService = initializeService(req, 'huggingface') as HuggingFaceService;
+      
+      const topics = await huggingfaceService.suggestTrendingTopics(theme, count);
+      
+      res.status(200).json(topics);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
 
   // 6.3 Google TTS API
   app.post("/api/tts/synthesize", async (req: Request, res: Response) => {
@@ -510,6 +681,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/openai-tts/voices", async (req: Request, res: Response) => {
     try {
       const ttsService = initializeService(req, 'openai_tts') as OpenAITTSService;
+      const voices = await ttsService.getVoices();
+      res.status(200).json(voices);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // 6.3.2 Coqui TTS API (Free alternative to OpenAI TTS)
+  app.post("/api/coqui-tts/synthesize", async (req: Request, res: Response) => {
+    try {
+      const { text, voice, speed } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      const ttsService = initializeService(req, 'coqui_tts') as CoquiTTSService;
+      
+      const result = await ttsService.synthesizeSpeech({
+        text,
+        voice,
+        speed
+      });
+      
+      res.status(200).json({
+        fileName: result.fileName,
+        filePath: `/uploads/audio/${result.fileName}`,
+        audioContent: result.audioContent
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/coqui-tts/voices", async (req: Request, res: Response) => {
+    try {
+      const ttsService = initializeService(req, 'coqui_tts') as CoquiTTSService;
       const voices = await ttsService.getVoices();
       res.status(200).json(voices);
     } catch (error) {
