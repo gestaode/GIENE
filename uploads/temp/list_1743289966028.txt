@@ -1,0 +1,5 @@
+file '/home/runner/workspace/uploads/images/test-image.svg'
+duration 3
+file '/home/runner/workspace/uploads/images/test-image2.svg'
+duration 3
+file '/home/runner/workspace/uploads/images/test-image2.svg'
