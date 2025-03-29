@@ -22,6 +22,7 @@ import { CoquiTTSService } from "./services/coqui-tts";
 import { HuggingFaceService } from "./services/huggingface";
 import { MistralAIService } from "./services/mistral";
 import { FFmpegService } from "./services/ffmpeg";
+import { GoogleCloudTTSService } from "./services/google-cloud-tts";
 
 // Setup file storage paths
 const __filename = fileURLToPath(import.meta.url);
@@ -60,12 +61,20 @@ function initializeService(req: Request, serviceName: string) {
       return new OpenAIService(process.env.OPENAI_API_KEY || '');
     case 'google_tts':
       return new GoogleTTSService(process.env.GOOGLE_TTS_API_KEY || '');
+    case 'google_cloud_tts':
+      return new GoogleCloudTTSService(process.env.GOOGLE_TTS_API_KEY || '');
     case 'openai_tts':
       return new OpenAITTSService(process.env.OPENAI_API_KEY || '');
     case 'gemini':
       return new GeminiService(process.env.GOOGLE_AI_API_KEY || '');
-    case 'coqui_tts':
-      return new CoquiTTSService();
+    case 'coqui_tts': {
+      // Inicializa o serviço CoquiTTS
+      const coquiService = new CoquiTTSService();
+      // Injeta o serviço Google Cloud TTS como fallback
+      const googleCloudTTS = new GoogleCloudTTSService(process.env.GOOGLE_TTS_API_KEY || '');
+      coquiService.setGoogleTTSService(googleCloudTTS);
+      return coquiService;
+    }
     case 'huggingface':
       return new HuggingFaceService(process.env.HUGGINGFACE_API_KEY);
     case 'mistral':
@@ -803,6 +812,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const ttsService = initializeService(req, 'coqui_tts') as CoquiTTSService;
       const voices = await ttsService.getVoices();
+      res.status(200).json(voices);
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  
+  // 6.3.3 Google Cloud TTS API (Modern implementation)
+  app.post("/api/google-cloud-tts/synthesize", async (req: Request, res: Response) => {
+    try {
+      const { text, languageCode, voiceName, speakingRate, pitch } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      const ttsService = initializeService(req, 'google_cloud_tts') as GoogleCloudTTSService;
+      
+      const result = await ttsService.synthesizeSpeech({
+        text,
+        languageCode,
+        voiceName,
+        speakingRate,
+        pitch
+      });
+      
+      res.status(200).json({
+        fileName: result.fileName,
+        filePath: `/uploads/audio/${result.fileName}`,
+        audioContent: result.audioContent
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/google-cloud-tts/voices", async (req: Request, res: Response) => {
+    try {
+      const languageCode = req.query.languageCode as string;
+      const ttsService = initializeService(req, 'google_cloud_tts') as GoogleCloudTTSService;
+      const voices = await ttsService.getVoices(languageCode);
       res.status(200).json(voices);
     } catch (error) {
       res.status(500).json({ message: "Server error", error: error instanceof Error ? error.message : String(error) });
