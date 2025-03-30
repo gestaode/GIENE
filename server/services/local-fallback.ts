@@ -220,9 +220,15 @@ export class LocalFallbackService {
     ]);
     
     // Extrair palavras-chave mais relevantes (não comuns e compridas)
-    const keywords = [...new Set(
-      words.filter(w => w.length > 3 && !commonWords.has(w))
-    )].slice(0, 6);
+    const keywordsArray = [];
+    for (const word of words) {
+      if (word.length > 3 && !commonWords.has(word)) {
+        keywordsArray.push(word);
+      }
+    }
+    // Remover duplicatas e limitar
+    const uniqueKeywords = Array.from(new Set(keywordsArray)).slice(0, 6);
+    const keywords = uniqueKeywords;
     
     // Adicionar palavras-chave populares relacionadas ao tema
     const themeKeywords = {
@@ -235,7 +241,9 @@ export class LocalFallbackService {
     
     // Tentar encontrar palavras-chave temáticas com base no texto
     let themeMatched = "";
-    for (const theme in themeKeywords) {
+    const themes = Object.keys(themeKeywords);
+    for (let i = 0; i < themes.length; i++) {
+      const theme = themes[i];
       if (scriptText.toLowerCase().includes(theme)) {
         themeMatched = theme;
         break;
@@ -243,15 +251,19 @@ export class LocalFallbackService {
     }
     
     // Adicionar hashtags temáticas
-    const themeHashtags = themeMatched 
-      ? themeKeywords[themeMatched].map(k => `#${k}`) 
-      : ["#estratégia", "#sucesso", "#crescimento", "#resultado", "#negócios"];
+    let themeHashtags = ["#estratégia", "#sucesso", "#crescimento", "#resultado", "#negócios"];
+    if (themeMatched) {
+      const matchedTheme = themeMatched as keyof typeof themeKeywords;
+      if (themeKeywords[matchedTheme]) {
+        themeHashtags = themeKeywords[matchedTheme].map(k => `#${k}`);
+      }
+    }
     
     // Gerar hashtags baseadas nas palavras-chave do texto
     const contentHashtags = keywords.map(k => `#${k}`);
     
     // Combinar e remover duplicatas
-    const allHashtags = [...new Set([...contentHashtags, ...themeHashtags])];
+    const allHashtags = Array.from(new Set([...contentHashtags, ...themeHashtags]));
     
     // Cortar para um número razoável
     const hashtags = allHashtags.slice(0, 8);

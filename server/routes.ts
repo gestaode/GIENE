@@ -38,6 +38,7 @@ import { PremiumBrazilianVoiceService } from "./services/premium-brazilian-voice
 import { ElevenLabsService } from "./services/elevenlabs";
 import { AIOrchestrator } from "./services/AIOrchestrator";
 import { cacheService } from "./services/caching";
+import { log } from "./vite";
 import { socialMediaOrchestrator } from "./services/social-media-orchestrator";
 import { exportService } from "./services/export-service";
 import { emailMarketingService } from "./services/email-marketing-service";
@@ -1906,7 +1907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return await Promise.race([resultPromise, timeoutPromise]);
           } catch (apiError) {
             // Em caso de erro ou timeout, usar o fallback local
-            log(`Usando fallback local após erro nas APIs: ${apiError instanceof Error ? apiError.message : String(apiError)}`, "routes");
+            console.log(`Usando fallback local após erro nas APIs: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
             
             // Importar o serviço de fallback local
             const { localFallbackService } = await import('./services/local-fallback');
@@ -1965,7 +1966,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return await Promise.race([resultPromise, timeoutPromise]);
           } catch (apiError) {
             // Em caso de erro ou timeout, usar o fallback local
-            log(`Usando fallback local para conteúdo social após erro nas APIs: ${apiError instanceof Error ? apiError.message : String(apiError)}`, "routes");
+            console.log(`Usando fallback local para conteúdo social após erro nas APIs: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
             
             // Importar o serviço de fallback local
             const { localFallbackService } = await import('./services/local-fallback');
