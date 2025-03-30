@@ -3,6 +3,7 @@ import {
   CalendarPlus, 
   TrendingUp, 
   Settings, 
+  Download,
   LucideIcon 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,12 @@ export function QuickActions() {
       colorClass: "bg-orange-50 hover:bg-orange-100 text-orange-700",
     },
     {
+      icon: Download,
+      label: "Exportar",
+      href: "/export",
+      colorClass: "bg-blue-50 hover:bg-blue-100 text-blue-700",
+    },
+    {
       icon: Settings,
       label: "Configurar",
       href: "/settings",
@@ -63,7 +70,7 @@ export function QuickActions() {
         <h3 className="font-medium text-lg">Ações Rápidas</h3>
       </div>
       <div className="p-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 xs:grid-cols-2 sm:grid-cols-3 gap-3">
           {actions.map((action) => (
             <QuickAction key={action.href} {...action} />
           ))}
