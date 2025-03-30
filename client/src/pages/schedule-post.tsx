@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -51,7 +51,7 @@ interface SchedulePostProps {
 
 export default function SchedulePost({ id }: SchedulePostProps) {
   const { toast } = useToast();
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const [isScheduling, setIsScheduling] = useState(false);
   const [isTrendSheetOpen, setIsTrendSheetOpen] = useState(false);
   const [date, setDate] = useState<Date | undefined>(new Date());
@@ -185,7 +185,7 @@ export default function SchedulePost({ id }: SchedulePostProps) {
       });
       
       // Redirecionar para a página de agendamentos
-      navigate('/schedule');
+      setLocation('/schedule');
     } catch (err) {
       toast({
         variant: "destructive",
@@ -214,7 +214,7 @@ export default function SchedulePost({ id }: SchedulePostProps) {
           <p className="text-muted-foreground">Configure os detalhes e agende o seu vídeo para as redes sociais</p>
         </div>
         <div className="flex space-x-3">
-          <Button variant="outline" onClick={() => navigate(`/edit-video/${id}`)}>
+          <Button variant="outline" onClick={() => setLocation(`/edit-video/${id}`)}>
             Voltar para edição
           </Button>
           <Button 

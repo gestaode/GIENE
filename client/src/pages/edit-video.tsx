@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,7 +25,7 @@ interface EditVideoProps {
 
 export default function EditVideo({ id }: EditVideoProps) {
   const { toast } = useToast();
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("preview");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -54,7 +54,7 @@ export default function EditVideo({ id }: EditVideoProps) {
 
   // Função para avançar para a próxima etapa (agendamento)
   const handleFinishEditing = () => {
-    navigate(`/schedule-post/${id}`);
+    setLocation(`/schedule-post/${id}`);
   };
 
   // Função para processar cortes e edições no vídeo
@@ -95,7 +95,7 @@ export default function EditVideo({ id }: EditVideoProps) {
           <p className="text-muted-foreground">Faça ajustes e refine seu vídeo antes de agendar a publicação</p>
         </div>
         <div className="flex space-x-3">
-          <Button variant="outline" onClick={() => navigate('/library')}>
+          <Button variant="outline" onClick={() => setLocation('/library')}>
             Cancelar
           </Button>
           <Button onClick={() => setShowConfirmDialog(true)}>
