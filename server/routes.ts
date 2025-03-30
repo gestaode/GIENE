@@ -7,7 +7,10 @@
 
 import { Router } from 'express';
 import contentApiRoutes from './routes/content-api';
-import { API_PREFIX } from './vite';
+import freeToolsApiRoutes from './routes/free-tools-api';
+
+// Prefixo padrão para APIs
+const API_PREFIX = '/api';
 
 const router = Router();
 
@@ -27,6 +30,7 @@ router.get(`${API_PREFIX}/health`, (req, res) => {
 
 // Configurar rotas para cada módulo da API
 router.use(`${API_PREFIX}/content`, contentApiRoutes);
+router.use(`${API_PREFIX}/free-tools`, freeToolsApiRoutes);
 // TODO: Adicionar outras rotas à medida que forem implementadas
 // router.use(`${API_PREFIX}/video`, videoApiRoutes);
 // router.use(`${API_PREFIX}/social-media`, socialMediaApiRoutes);

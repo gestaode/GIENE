@@ -1,5 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import routes from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { cacheService } from "./services/caching";
 import { AIOrchestrator } from "./services/AIOrchestrator";
@@ -336,7 +336,8 @@ async function registerResilienceTests() {
   registerResilienceTests();
   
   // Iniciar a aplicação
-  const server = await registerRoutes(app);
+  app.use(routes);
+  const server = app.listen();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
