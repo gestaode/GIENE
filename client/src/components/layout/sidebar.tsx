@@ -14,7 +14,8 @@ import {
   X,
   Video,
   TestTube,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Download
 } from "lucide-react";
 
 type NavItem = {
@@ -57,6 +58,11 @@ export function Sidebar() {
       href: "/analytics",
       label: "Analytics",
       icon: <BarChart2 size={20} />,
+    },
+    {
+      href: "/export",
+      label: "Exportar",
+      icon: <Download size={20} />,
     },
     {
       href: "/settings",

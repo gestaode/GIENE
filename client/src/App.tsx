@@ -16,6 +16,8 @@ import Settings from "@/pages/settings";
 import TestAdvancedVideo from "@/pages/test-advanced-video";
 import FFmpegTester from "@/pages/ffmpeg-tester";
 import ImageTester from "@/pages/image-tester";
+import Export from "@/pages/export";
+import GoogleExport from "@/pages/google-export";
 
 function MainLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -112,6 +114,20 @@ function Router() {
         {() => (
           <MainLayout>
             <ImageTester />
+          </MainLayout>
+        )}
+      </Route>
+      <Route path="/export">
+        {() => (
+          <MainLayout>
+            <Export />
+          </MainLayout>
+        )}
+      </Route>
+      <Route path="/google-export">
+        {() => (
+          <MainLayout>
+            <GoogleExport />
           </MainLayout>
         )}
       </Route>
