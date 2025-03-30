@@ -1887,7 +1887,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { theme, targetAudience, duration, tone, keywords, additionalInstructions },
         async () => {
           try {
-            return await aiOrchestrator.generateVideoScript({
+            // Tente gerar com o orquestrador de IA com timeout
+            const resultPromise = aiOrchestrator.generateVideoScript({
               theme,
               targetAudience,
               duration,
@@ -1895,8 +1896,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
               keywords,
               additionalInstructions
             });
-          } catch (error) {
-            throw error;
+            
+            // Criar uma versão da promise com timeout
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error("Timeout ao gerar roteiro com APIs externas")), 5000);
+            });
+            
+            // Competição entre a geração e o timeout
+            return await Promise.race([resultPromise, timeoutPromise]);
+          } catch (apiError) {
+            // Em caso de erro ou timeout, usar o fallback local
+            log(`Usando fallback local após erro nas APIs: ${apiError instanceof Error ? apiError.message : String(apiError)}`, "routes");
+            
+            // Importar o serviço de fallback local
+            const { localFallbackService } = await import('./services/local-fallback');
+            
+            const fallbackResult = await localFallbackService.generateVideoScript({
+              theme,
+              targetAudience,
+              duration,
+              tone,
+              keywords,
+              additionalInstructions
+            });
+            
+            // Adicionar flag indicando uso de fallback para rastreamento
+            return {
+              ...fallbackResult,
+              usedFallback: true
+            };
           }
         },
         3600 // Cache válido por 1 hora
@@ -1925,9 +1953,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { videoScript, options },
         async () => {
           try {
-            return await aiOrchestrator.generateSocialMediaContent(videoScript, options);
-          } catch (error) {
-            throw error;
+            // Tente gerar com o orquestrador de IA com timeout
+            const resultPromise = aiOrchestrator.generateSocialMediaContent(videoScript, options);
+            
+            // Criar uma versão da promise com timeout
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error("Timeout ao gerar conteúdo para redes sociais com APIs externas")), 5000);
+            });
+            
+            // Competição entre a geração e o timeout
+            return await Promise.race([resultPromise, timeoutPromise]);
+          } catch (apiError) {
+            // Em caso de erro ou timeout, usar o fallback local
+            log(`Usando fallback local para conteúdo social após erro nas APIs: ${apiError instanceof Error ? apiError.message : String(apiError)}`, "routes");
+            
+            // Importar o serviço de fallback local
+            const { localFallbackService } = await import('./services/local-fallback');
+            
+            const fallbackResult = await localFallbackService.generateSocialMediaContent(videoScript, options);
+            
+            // Adicionar flag indicando uso de fallback para rastreamento
+            return {
+              ...fallbackResult,
+              usedFallback: true
+            };
           }
         },
         3600 // Cache válido por 1 hora
@@ -1956,9 +2005,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { theme, count },
         async () => {
           try {
-            return await aiOrchestrator.suggestTrendingTopics(theme, count);
-          } catch (error) {
-            throw error;
+            // Tente gerar com o orquestrador de IA com timeout
+            const resultPromise = aiOrchestrator.suggestTrendingTopics(theme, count);
+            
+            // Criar uma versão da promise com timeout
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error("Timeout ao buscar tópicos em tendência com APIs externas")), 5000);
+            });
+            
+            // Competição entre a geração e o timeout
+            return await Promise.race([resultPromise, timeoutPromise]);
+          } catch (apiError) {
+            // Em caso de erro ou timeout, usar o fallback local
+            console.log(`Usando fallback local para tópicos em tendência após erro nas APIs: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+            
+            // Importar o serviço de fallback local
+            const { localFallbackService } = await import('./services/local-fallback');
+            
+            const fallbackResult = await localFallbackService.suggestTrendingTopics(theme, count);
+            
+            // Adicionar flag indicando uso de fallback para rastreamento
+            return {
+              topics: fallbackResult,
+              usedFallback: true
+            };
           }
         },
         1800 // Cache válido por 30 minutos (tópicos em tendência mudam mais rápido)

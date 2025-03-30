@@ -47,80 +47,143 @@ export class LocalFallbackService {
     suggestedKeywords: string[];
     videoLengthSeconds: number;
   }> {
-    log("Usando gerador de scripts local de fallback", "local-fallback");
+    log("Usando gerador de scripts local de fallback aprimorado", "local-fallback");
     
     const themes = [
       "Marketing Digital",
       "Vendas Online",
       "Estratégias de Negócios",
       "Empreendedorismo",
-      "Transformação Digital"
+      "Transformação Digital",
+      "Finanças Pessoais",
+      "Investimentos",
+      "Desenvolvimento Pessoal",
+      "Produtividade",
+      "Tecnologia"
     ];
     
     // Use o tema fornecido ou escolha um aleatoriamente
     const theme = options.theme || themes[Math.floor(Math.random() * themes.length)];
     
-    // Templates de scripts pré-definidos
-    const scriptTemplates = [
+    // Modelos de estrutura de script mais elaborados
+    type ScriptTemplate = {
+      title: string;
+      structure: string[];
+      keywords: string[];
+      length: number;
+    };
+    
+    // Templates de scripts avançados com estruturas específicas
+    const scriptTemplates: ScriptTemplate[] = [
+      // Modelo 1: Lista de dicas/estratégias
       {
-        title: `5 Estratégias Essenciais para ${theme}`,
-        script: `Olá! Hoje vou compartilhar 5 estratégias essenciais para ter sucesso com ${theme}.
-
-Primeiro, é fundamental conhecer seu público-alvo e entender suas necessidades específicas.
-
-Segundo, desenvolva uma presença online consistente e profissional que reflita os valores da sua marca.
-
-Terceiro, crie conteúdo relevante e de valor que resolva problemas reais do seu público.
-
-Quarto, use análise de dados para tomar decisões baseadas em informações concretas, não em suposições.
-
-Por último, esteja sempre atualizado com as tendências do mercado e adapte suas estratégias conforme necessário.
-
-Implemente essas cinco estratégias e você verá resultados significativos em pouco tempo!`,
-        keywords: ["estratégias", theme.toLowerCase(), "sucesso", "negócios", "crescimento"],
+        title: `${Math.floor(Math.random() * 3) + 5} Estratégias Avançadas para ${theme}`,
+        structure: [
+          `Olá! Hoje vou compartilhar estratégias avançadas para destacar seu negócio com ${theme}.`,
+          `Antes de começarmos, é importante entender que ${theme} está revolucionando o mercado atual.`,
+          `A primeira estratégia é focar em personalização. Conheça seu público e adapte sua abordagem.`,
+          `A segunda estratégia é a análise contínua de dados. Use métricas para tomar decisões mais inteligentes.`,
+          `A terceira estratégia envolve automação de processos. Isso economiza tempo e recursos valiosos.`,
+          `Quarta estratégia: integração de plataformas. Sistemas conectados geram melhores resultados.`,
+          `A quinta e mais poderosa: construa relacionamentos autênticos com seu público-alvo.`,
+          `Combine todas estas estratégias para criar um sistema de ${theme} verdadeiramente eficaz.`,
+          `Empresas que implementam estas estratégias veem um aumento médio de 70% em seus resultados!`,
+          `Comece a implementar hoje mesmo e colha os benefícios do ${theme} em seu negócio.`
+        ],
+        keywords: ["estratégias", theme.toLowerCase(), "personalização", "automação", "resultados"],
         length: 45
       },
+      
+      // Modelo 2: Problema e solução
       {
-        title: `Como Revolucionar Seu Negócio com ${theme}`,
-        script: `Você quer revolucionar seu negócio usando ${theme}? Neste vídeo, vou mostrar exatamente como fazer isso.
-
-O mercado está mudando rapidamente, e as empresas que não se adaptam ficam para trás. ${theme} é a chave para se manter competitivo.
-
-Muitos empreendedores cometem o erro de ignorar o poder do ${theme} até que seja tarde demais.
-
-Com a metodologia certa, você pode implementar ${theme} em seu negócio de forma eficaz e econômica.
-
-Os resultados falam por si: empresas que investem em ${theme} veem um aumento médio de 30% em seus resultados.
-
-Não perca mais tempo! Comece hoje mesmo a transformar seu negócio com ${theme}.`,
-        keywords: [theme.toLowerCase(), "transformação", "resultados", "negócios", "crescimento"],
-        length: 40
+        title: `Como Solucionar os Principais Desafios de ${theme}`,
+        structure: [
+          `Você está enfrentando desafios com ${theme}? Neste vídeo, vou mostrar soluções práticas.`,
+          `O maior problema que vejo constantemente é a falta de estratégia clara em ${theme}.`,
+          `A maioria das pessoas tenta implementar ${theme} sem entender completamente seu funcionamento.`,
+          `Isso leva a desperdício de recursos e resultados decepcionantes.`,
+          `A solução começa com um diagnóstico preciso do seu cenário atual.`,
+          `Em seguida, desenvolva um plano estruturado com metas claras e mensuráveis.`,
+          `Implemente ferramentas e processos adequados para otimizar seus esforços.`,
+          `Monitore constantemente os resultados e faça ajustes quando necessário.`,
+          `Esta abordagem sistemática para ${theme} transforma desafios em oportunidades.`,
+          `Meus clientes que seguem este método conseguem resultados até 3x melhores. Começe agora!`
+        ],
+        keywords: [theme.toLowerCase(), "desafios", "soluções", "estratégia", "resultados"],
+        length: 50
       },
+      
+      // Modelo 3: Case de sucesso
       {
-        title: `O Segredo do ${theme} que Ninguém te Conta`,
-        script: `Existe um segredo sobre ${theme} que poucos profissionais conhecem, e hoje vou revelar para você.
-
-A maioria das pessoas aborda ${theme} da maneira errada, focando apenas nos aspectos superficiais.
-
-O verdadeiro poder do ${theme} está na consistência e na estratégia de longo prazo.
-
-Enquanto seus concorrentes estão seguindo tendências passageiras, você pode construir uma base sólida.
-
-Este segredo transformou completamente os resultados dos meus clientes, com aumentos de até 250% em seus retornos.
-
-Se você implementar o que aprenderá hoje, seu negócio nunca mais será o mesmo. Vamos começar!`,
-        keywords: ["segredo", theme.toLowerCase(), "estratégia", "resultados", "transformação"],
-        length: 35
+        title: `Case de Sucesso: Transformando Resultados com ${theme}`,
+        structure: [
+          `Hoje vou compartilhar um case real de como ${theme} pode transformar completamente um negócio.`,
+          `Este case envolve uma empresa que estava lutando para se destacar em um mercado competitivo.`,
+          `Antes de implementar ${theme}, eles enfrentavam problemas sérios de crescimento e retenção.`,
+          `O primeiro passo foi realizar uma análise completa do cenário atual e definir objetivos claros.`,
+          `Em seguida, desenvolvemos uma estratégia personalizada de ${theme} adaptada às necessidades específicas.`,
+          `A implementação foi gradual, com foco inicial nos pontos de maior impacto.`,
+          `Os primeiros resultados começaram a aparecer em apenas 30 dias, com aumento de engajamento.`,
+          `Em três meses, a empresa registrou crescimento de 150% em seus principais indicadores.`,
+          `O segredo foi a consistência e a abordagem científica para testar e otimizar cada etapa.`,
+          `Você pode obter resultados semelhantes aplicando estes mesmos princípios em seu negócio.`
+        ],
+        keywords: ["case", "sucesso", theme.toLowerCase(), "resultados", "estratégia"],
+        length: 55
+      },
+      
+      // Modelo 4: Tendências e futuro
+      {
+        title: `O Futuro do ${theme}: Tendências que Vão Dominar o Mercado`,
+        structure: [
+          `O cenário de ${theme} está mudando rapidamente. Vamos analisar as principais tendências futuras.`,
+          `A primeira tendência é a hiperpersonalização através de inteligência artificial.`,
+          `Em segundo lugar, vemos a integração completa entre canais online e offline.`,
+          `A terceira tendência é a priorização da experiência do usuário em todas as interações.`,
+          `A quarta tendência envolve sustentabilidade e responsabilidade social integradas à estratégia.`,
+          `Os dados em tempo real e análise preditiva representam a quinta maior tendência.`,
+          `Empresas que antecipam estas mudanças conseguem vantagem competitiva significativa.`,
+          `Para se preparar, comece investindo em capacitação e tecnologias adequadas.`,
+          `Desenvolva uma mentalidade de experimentação contínua e adaptação rápida.`,
+          `O futuro pertence às organizações ágeis que abraçam a evolução constante do ${theme}.`
+        ],
+        keywords: ["tendências", "futuro", theme.toLowerCase(), "inovação", "tecnologia"],
+        length: 48
+      },
+      
+      // Modelo 5: Tutorial passo a passo
+      {
+        title: `${theme} na Prática: Tutorial Completo Passo a Passo`,
+        structure: [
+          `Neste tutorial prático, vou mostrar exatamente como implementar ${theme} do zero.`,
+          `Antes de começarmos, vamos entender os fundamentos essenciais de ${theme}.`,
+          `Passo 1: Defina seus objetivos específicos e mensuráveis com ${theme}.`,
+          `Passo 2: Identifique seu público-alvo e suas necessidades específicas.`,
+          `Passo 3: Desenvolva sua estratégia personalizada de ${theme}.`,
+          `Passo 4: Escolha as ferramentas e plataformas mais adequadas para sua realidade.`,
+          `Passo 5: Implemente um sistema de métricas para acompanhar resultados.`,
+          `Passo 6: Faça testes, analise os dados e otimize continuamente.`,
+          `Passo 7: Escale as estratégias que funcionam e abandone as que não trazem resultados.`,
+          `Seguindo este processo, você terá uma implementação de ${theme} realmente eficaz e lucrativa.`
+        ],
+        keywords: ["tutorial", "passo a passo", theme.toLowerCase(), "implementação", "estratégia"],
+        length: 52
       }
     ];
     
     // Selecionar um template aleatório
     const selectedTemplate = scriptTemplates[Math.floor(Math.random() * scriptTemplates.length)];
     
+    // Montar o script completo a partir da estrutura
+    let fullScript = "";
+    for (const paragraph of selectedTemplate.structure) {
+      fullScript += paragraph + "\n\n";
+    }
+    
     // Adicionar um identificador único de fallback para rastreamento
     const template = {
       title: selectedTemplate.title,
-      script: selectedTemplate.script,
+      script: fullScript.trim(),
       suggestedKeywords: selectedTemplate.keywords,
       videoLengthSeconds: selectedTemplate.length,
       _fallback: true
@@ -130,7 +193,7 @@ Se você implementar o que aprenderá hoje, seu negócio nunca mais será o mesm
     const cacheFile = path.join("./fallback-cache/scripts", `script_${Date.now()}.json`);
     fs.writeFileSync(cacheFile, JSON.stringify(template, null, 2));
     
-    log(`Script de fallback gerado e salvo em ${cacheFile}`, "local-fallback");
+    log(`Script avançado de fallback gerado e salvo em ${cacheFile}`, "local-fallback");
     
     return template;
   }
@@ -145,31 +208,91 @@ Se você implementar o que aprenderá hoje, seu negócio nunca mais será o mesm
     tiktok: string;
     hashtags: string[];
   }> {
-    log("Usando gerador de conteúdo social local de fallback", "local-fallback");
+    log("Usando gerador de conteúdo social local de fallback aprimorado", "local-fallback");
     
-    // Extrair palavras-chave do texto do script
+    // Extrair palavras-chave do texto do script para hashtags mais relevantes
     const words = scriptText.toLowerCase().split(/\s+/);
-    const commonWords = new Set(["a", "o", "e", "de", "da", "do", "para", "com", "em", "um", "uma", "que", "seu", "sua"]);
-    const keywords = [...new Set(words.filter(w => w.length > 3 && !commonWords.has(w)))].slice(0, 5);
+    const commonWords = new Set([
+      "a", "o", "e", "de", "da", "do", "para", "com", "em", "um", "uma", 
+      "que", "seu", "sua", "como", "por", "mais", "dos", "das", "nos", "nas",
+      "este", "esta", "isso", "aqui", "você", "seu", "sua", "seus", "suas",
+      "nós", "eles", "elas", "este", "esta", "estes", "estas", "esse", "essa"
+    ]);
     
-    // Gerar hashtags baseadas nas palavras-chave
-    const hashtags = keywords.map(k => `#${k}`);
+    // Extrair palavras-chave mais relevantes (não comuns e compridas)
+    const keywords = [...new Set(
+      words.filter(w => w.length > 3 && !commonWords.has(w))
+    )].slice(0, 6);
     
-    // Extrair uma frase impactante do script (primeira ou segunda frase)
-    const sentences = scriptText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const impactSentence = sentences.length > 1 ? sentences[1].trim() : sentences[0].trim();
+    // Adicionar palavras-chave populares relacionadas ao tema
+    const themeKeywords = {
+      "marketing": ["estratégia", "digital", "conteúdo", "resultado", "vendas"],
+      "negócio": ["empreendedor", "sucesso", "estratégia", "resultado", "crescimento"],
+      "vendas": ["conversão", "cliente", "resultado", "estratégia", "negócio"],
+      "tecnologia": ["inovação", "digital", "transformação", "futuro", "solução"],
+      "finanças": ["investimento", "resultado", "economia", "crescimento", "dinheiro"]
+    };
+    
+    // Tentar encontrar palavras-chave temáticas com base no texto
+    let themeMatched = "";
+    for (const theme in themeKeywords) {
+      if (scriptText.toLowerCase().includes(theme)) {
+        themeMatched = theme;
+        break;
+      }
+    }
+    
+    // Adicionar hashtags temáticas
+    const themeHashtags = themeMatched 
+      ? themeKeywords[themeMatched].map(k => `#${k}`) 
+      : ["#estratégia", "#sucesso", "#crescimento", "#resultado", "#negócios"];
+    
+    // Gerar hashtags baseadas nas palavras-chave do texto
+    const contentHashtags = keywords.map(k => `#${k}`);
+    
+    // Combinar e remover duplicatas
+    const allHashtags = [...new Set([...contentHashtags, ...themeHashtags])];
+    
+    // Cortar para um número razoável
+    const hashtags = allHashtags.slice(0, 8);
+    
+    // Extrair frases impactantes do script (até três)
+    const sentences = scriptText.split(/[.!?]+/).filter(s => s.trim().length > 5);
+    const impactSentences = sentences.slice(0, 3).map(s => s.trim());
     
     // Extrair título (primeira linha do script)
     const firstLine = sentences[0].trim();
     
-    // Gerar conteúdos específicos para cada plataforma
-    const instagram = `✨ ${firstLine} ✨\n\n${impactSentence}\n\nLeia mais no link da bio!\n\n${hashtags.join(" ")}`;
+    // Encontrar uma frase com apelo à ação
+    const callToAction = [
+      "Não perca tempo e comece a implementar hoje mesmo!",
+      "Clique e descubra como transformar seu negócio!",
+      "Assista o vídeo completo e revolucione seus resultados!",
+      "Compartilhe com quem precisa dessas informações!",
+      "Salve este post para consultar mais tarde!"
+    ][Math.floor(Math.random() * 5)];
     
-    const facebook = `${firstLine}\n\n${scriptText.substring(0, Math.min(scriptText.length, 200))}...\n\nClique abaixo para assistir o vídeo completo e descobrir mais!\n\n${hashtags.slice(0, 3).join(" ")}`;
+    // Gerar conteúdo específico para Instagram - mais visual e engajador
+    const instagram = `✨ ${firstLine} ✨\n\n${impactSentences[0]}\n\n${
+      impactSentences.length > 1 ? `💡 ${impactSentences[1]}\n\n` : ""
+    }👉 ${callToAction}\n\nDeixe seu comentário se isso te ajudou!\n\n${hashtags.join(" ")}`;
     
-    const twitter = `${impactSentence.substring(0, Math.min(impactSentence.length, 180))}...\n\n${hashtags.slice(0, 2).join(" ")}`;
+    // Conteúdo para Facebook - mais informativo e detalhado
+    const facebook = `📊 ${firstLine}\n\n${
+      scriptText.substring(0, Math.min(scriptText.length, 250))
+    }...\n\n${callToAction}\n\nClique abaixo para assistir o vídeo completo e descobrir como aplicar estas estratégias no seu negócio!\n\n${
+      hashtags.slice(0, 5).join(" ")
+    }`;
     
-    const tiktok = `${firstLine} 🔥\n\n${hashtags.join(" ")}`;
+    // Twitter - conciso e direto
+    const twitter = `${
+      impactSentences[0].substring(0, Math.min(impactSentences[0].length, 200))
+    }\n\n${callToAction.substring(0, 50)}...\n\n${hashtags.slice(0, 3).join(" ")}`;
+    
+    // TikTok - muito breve, com emojis e alta energia
+    const tiktok = `${firstLine} 🔥\n\n${
+      impactSentences.length > 1 ? impactSentences[1].split(" ").slice(0, 7).join(" ") + "..." : ""
+    }\n\n✅ ${callToAction}\n\n${hashtags.slice(0, 4).join(" ")}`;
     
     const result = {
       instagram,
@@ -184,7 +307,7 @@ Se você implementar o que aprenderá hoje, seu negócio nunca mais será o mesm
     const cacheFile = path.join("./fallback-cache/scripts", `social_${Date.now()}.json`);
     fs.writeFileSync(cacheFile, JSON.stringify(result, null, 2));
     
-    log(`Conteúdo social de fallback gerado e salvo em ${cacheFile}`, "local-fallback");
+    log(`Conteúdo social avançado de fallback gerado e salvo em ${cacheFile}`, "local-fallback");
     
     return result;
   }
