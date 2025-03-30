@@ -127,13 +127,26 @@ function ExportCard({ title, description, icon, linkText, linkUrl, isExternalLin
         body: JSON.stringify(postParams),
       });
       
+      if (!response.ok) {
+        throw new Error(`Erro na resposta: ${response.status}`);
+      }
+      
       const data = await response.json();
       
-      if (data.success && data.downloadUrl) {
+      if (data.downloadUrl) {
         window.location.href = data.downloadUrl;
+      } else if (data.jobId) {
+        // Se temos um jobId mas não temos downloadUrl, redirecionar para o endpoint de download
+        window.location.href = `/api/export/download/${data.jobId}`;
+      } else if (data.success) {
+        // Caso de sucesso sem URL específica
+        alert('Exportação concluída com sucesso!');
+      } else {
+        throw new Error(data.error || 'Erro desconhecido na exportação');
       }
     } catch (error) {
       console.error('Erro ao solicitar exportação:', error);
+      alert(`Erro na exportação: ${error instanceof Error ? error.message : 'Falha na conexão'}`);
     } finally {
       setLoading(false);
     }

@@ -72,36 +72,16 @@ router.post('/start', async (req, res) => {
       // Obter trabalho atualizado
       const updatedJob = await storage.getExportJob(job.id);
       
-      if (updatedJob && updatedJob.status === 'completed' && updatedJob.filePath) {
-        // Definir nome adequado para download
-        const filename = path.basename(updatedJob.filePath);
-        const downloadName = `export_${updatedJob.type}_${updatedJob.id}${path.extname(updatedJob.filePath)}`;
-        
-        // Configurar headers para download
-        res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
-        
-        if (updatedJob.format === 'json') {
-          res.setHeader('Content-Type', 'application/json');
-        } else if (updatedJob.format === 'csv') {
-          res.setHeader('Content-Type', 'text/csv');
-        } else {
-          res.setHeader('Content-Type', 'application/octet-stream');
-        }
-        
-        // Streaming do arquivo para o cliente
-        const fileStream = exportService.getExportFileStream(updatedJob.filePath);
-        fileStream.pipe(res);
-      } else {
-        // Se o trabalho falhou ou não tem arquivo, retornar resposta JSON
-        res.status(updatedJob?.status === 'failed' ? 500 : 202).json({
-          success: updatedJob?.status === 'completed',
-          message: `Exportação de ${type} ${updatedJob?.status}`,
-          jobId: job.id,
-          status: updatedJob?.status || job.status,
-          error: updatedJob?.error || null,
-          downloadUrl: updatedJob?.status === 'completed' ? `/api/export/download/${job.id}` : null
-        });
-      }
+      // Sempre retornar uma resposta JSON com um link para download
+      // ao invés de streaming direto. Isso facilita o tratamento no frontend.
+      res.json({
+        success: updatedJob?.status === 'completed',
+        message: `Exportação de ${type} ${updatedJob?.status || 'processando'}`,
+        jobId: job.id,
+        status: updatedJob?.status || job.status,
+        error: updatedJob?.error || null,
+        downloadUrl: updatedJob?.status === 'completed' ? `/api/export/download/${job.id}` : null
+      });
     }
   } catch (error) {
     log(`Erro ao iniciar exportação: ${error instanceof Error ? error.message : String(error)}`, 'export-api');
