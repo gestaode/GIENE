@@ -16,7 +16,6 @@ const IGNORED_DIRS = [
   "node_modules",
   ".git",
   ".replit",
-  "uploads",
   "dist",
   "build",
   "coverage",
@@ -24,6 +23,11 @@ const IGNORED_DIRS = [
   ".github",
   ".vscode",
   "test_videos"
+];
+
+// Diretórios especiais a tratar de forma diferente
+const SPECIAL_DIRS = [
+  "uploads"
 ];
 
 // Extensões de arquivos a incluir na exportação de código
@@ -142,6 +146,9 @@ export class ExportService {
         } else {
           filePath = await this.exportDataAsJson(job.userId, exportDir);
         }
+      } else if (job.type === "full_app") {
+        // Exportação completa do aplicativo
+        filePath = await this.exportFullApp(job.userId, exportDir);
       } else {
         throw new Error(`Tipo de exportação inválido: ${job.type}`);
       }
@@ -159,9 +166,112 @@ export class ExportService {
       
       log(`Job de exportação ${job.id} concluído com sucesso. Arquivo: ${filePath}`, "export-service");
     } catch (error) {
-      log(`Erro ao processar job de exportação ${job.id}: ${error.message}`, "export-service");
-      await this.updateJobAsFailed(job.id, error.message);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log(`Erro ao processar job de exportação ${job.id}: ${errorMessage}`, "export-service");
+      await this.updateJobAsFailed(job.id, errorMessage);
     }
+  }
+  
+  /**
+   * Exporta o aplicativo completo como um único arquivo ZIP
+   * @param userId ID do usuário
+   * @param exportDir Diretório de exportação
+   */
+  private async exportFullApp(userId: number, exportDir: string): Promise<string> {
+    const zipFilePath = path.join(exportDir, "videogenie_app_export.zip");
+    const output = createWriteStream(zipFilePath);
+    const archive = archiver("zip", {
+      zlib: { level: 7 } // Nível médio-alto de compressão
+    });
+    
+    archive.pipe(output);
+    
+    // Adicionar README com instruções
+    const readmeContent = `# VideoGenie App Export
+    
+Data de exportação: ${new Date().toISOString()}
+
+## Conteúdo deste arquivo
+Este arquivo ZIP contém o código fonte completo do aplicativo VideoGenie, incluindo:
+
+1. Todos os arquivos fonte (TypeScript, React, CSS, etc.)
+2. Configurações e dependências
+3. Amostras de dados
+4. Estrutura de diretórios
+
+## Como usar
+Para usar este código:
+
+1. Extraia o conteúdo deste arquivo ZIP
+2. Instale as dependências com \`npm install\`
+3. Inicie o servidor com \`npm run dev\`
+
+## Módulos principais
+- server/: Contém o código do backend (API Express)
+- client/: Contém o código do frontend (React)
+- shared/: Contém os tipos e schemas compartilhados
+- uploads/: Contém amostras de arquivos gerados
+
+## Configuração de APIs
+Para usar completamente este aplicativo, você precisará configurar suas próprias chaves de API:
+
+- OpenAI API
+- Google TTS API
+- HuggingFace API
+- Mistral API
+- Pexels API
+
+## Suporte
+Para mais informações, consulte a documentação incluída no projeto.
+`;
+    
+    // Adicionar arquivo README
+    archive.append(readmeContent, { name: 'README.md' });
+    
+    // Adicionar diretório raiz ao arquivo, excluindo diretórios ignorados
+    await this.addDirectoryToArchive(archive, process.cwd(), "", IGNORED_DIRS);
+    
+    // Adicionar também alguns arquivos de amostra da pasta uploads
+    const uploadsPath = path.join(process.cwd(), "uploads");
+    if (fs.existsSync(uploadsPath)) {
+      // Processar diretório de uploads separadamente para incluir apenas amostras
+      try {
+        // Os diretórios já foram criados no método addDirectoryToArchive
+        // Agora apenas adicionamos alguns arquivos de amostra
+        await this.addSampleFilesToArchive(archive, uploadsPath, "uploads");
+        
+        // Adicionar dados de metadados para referência
+        const videos = await storage.getVideos(userId);
+        if (videos.length > 0) {
+          const metadataContent = {
+            exportDate: new Date().toISOString(),
+            videos: videos.map(v => ({
+              id: v.id,
+              title: v.title,
+              description: v.description,
+              duration: v.duration,
+              createdAt: v.createdAt
+            }))
+          };
+          
+          archive.append(JSON.stringify(metadataContent, null, 2), { 
+            name: 'uploads/metadata.json' 
+          });
+        }
+      } catch (error) {
+        log(`Erro ao processar diretório de uploads para exportação completa: ${error instanceof Error ? error.message : String(error)}`, "export-service");
+        // Continuar mesmo com erro para não falhar toda a exportação
+      }
+    }
+    
+    // Finalizar o arquivo
+    await new Promise<void>((resolve, reject) => {
+      output.on("close", () => resolve());
+      archive.on("error", (err) => reject(err));
+      archive.finalize();
+    });
+    
+    return zipFilePath;
   }
 
   /**
@@ -216,13 +326,44 @@ export class ExportService {
           continue;
         }
         
+        // Tratar diretórios especiais
+        if (SPECIAL_DIRS.includes(entry.name)) {
+          // Adicionar pasta vazia
+          archive.append('', { name: entryRelativePath + '/' });
+          
+          // Processar "uploads" de forma diferente para incluir estrutura, mas não todos os arquivos
+          if (entry.name === "uploads") {
+            const subfolders = ["videos", "images", "audio", "temp"];
+            
+            // Criar subpastas
+            for (const subfolder of subfolders) {
+              archive.append('', { name: `${entryRelativePath}/${subfolder}/` });
+            }
+            
+            // Adicionar README
+            const readmeContent = "Este diretório contém os arquivos gerados pelo aplicativo VideoGenie.\n" +
+                                 "- videos: Vídeos gerados pela aplicação\n" +
+                                 "- images: Imagens usadas nos vídeos\n" +
+                                 "- audio: Arquivos de áudio para vídeos\n" +
+                                 "- temp: Arquivos temporários";
+            
+            archive.append(readmeContent, { name: `${entryRelativePath}/README.txt` });
+            
+            // Adicionar alguns exemplos de arquivos (limitado a poucos)
+            await this.addSampleFilesToArchive(archive, entryFullPath, entryRelativePath);
+          }
+          
+          continue;
+        }
+        
         // Adicionar subdiretório recursivamente
+        archive.append('', { name: entryRelativePath + '/' });
         await this.addDirectoryToArchive(archive, basePath, entryRelativePath, ignoredDirs);
       } else if (entry.isFile()) {
         // Verificar extensão do arquivo para código fonte
         const ext = path.extname(entry.name).toLowerCase();
         
-        if (CODE_EXTENSIONS.includes(ext)) {
+        if (CODE_EXTENSIONS.includes(ext) || entry.name === 'package.json' || entry.name === 'package-lock.json') {
           // Verificar tamanho do arquivo
           const stats = fs.statSync(entryFullPath);
           
@@ -232,6 +373,61 @@ export class ExportService {
           }
         }
       }
+    }
+  }
+  
+  /**
+   * Adiciona alguns arquivos de amostra de diretórios grandes
+   * @param archive Arquivo ZIP
+   * @param dirPath Caminho completo do diretório
+   * @param relativeDirPath Caminho relativo no ZIP
+   */
+  private async addSampleFilesToArchive(
+    archive: archiver.Archiver, 
+    dirPath: string,
+    relativeDirPath: string
+  ): Promise<void> {
+    try {
+      // Adicionar alguns vídeos
+      const videosPath = path.join(dirPath, "videos");
+      if (fs.existsSync(videosPath)) {
+        const videoFiles = fs.readdirSync(videosPath).slice(0, 3); // Limitar a 3 vídeos
+        
+        for (const videoFile of videoFiles) {
+          const videoPath = path.join(videosPath, videoFile);
+          if (fs.statSync(videoPath).isFile() && fs.statSync(videoPath).size <= MAX_FILE_SIZE) {
+            archive.file(videoPath, { name: `${relativeDirPath}/videos/${videoFile}` });
+          }
+        }
+      }
+      
+      // Adicionar algumas imagens
+      const imagesPath = path.join(dirPath, "images");
+      if (fs.existsSync(imagesPath)) {
+        const imageFiles = fs.readdirSync(imagesPath).slice(0, 5); // Limitar a 5 imagens
+        
+        for (const imageFile of imageFiles) {
+          const imagePath = path.join(imagesPath, imageFile);
+          if (fs.statSync(imagePath).isFile() && fs.statSync(imagePath).size <= MAX_FILE_SIZE) {
+            archive.file(imagePath, { name: `${relativeDirPath}/images/${imageFile}` });
+          }
+        }
+      }
+      
+      // Adicionar alguns áudios
+      const audioPath = path.join(dirPath, "audio");
+      if (fs.existsSync(audioPath)) {
+        const audioFiles = fs.readdirSync(audioPath).slice(0, 3); // Limitar a 3 áudios
+        
+        for (const audioFile of audioFiles) {
+          const filePath = path.join(audioPath, audioFile);
+          if (fs.statSync(filePath).isFile() && fs.statSync(filePath).size <= MAX_FILE_SIZE) {
+            archive.file(filePath, { name: `${relativeDirPath}/audio/${audioFile}` });
+          }
+        }
+      }
+    } catch (error) {
+      log(`Erro ao adicionar arquivos de amostra: ${error instanceof Error ? error.message : String(error)}`, "export-service");
     }
   }
   

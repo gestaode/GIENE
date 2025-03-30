@@ -222,210 +222,70 @@ router.get('/download/:jobId', async (req, res) => {
  */
 router.get('/app', async (req, res) => {
   try {
-    // Criar diretório temporário para a exportação
-    const timestamp = Date.now();
-    const tempDir = path.join(process.cwd(), 'uploads/temp');
-    const exportDir = path.join(tempDir, `app_export_${timestamp}`);
+    // Redirecionar para o job de exportação completa
+    const userId = 1; // Usuário padrão por simplicidade
     
-    // Criar diretório se não existir
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-    if (!fs.existsSync(exportDir)) {
-      fs.mkdirSync(exportDir, { recursive: true });
-    }
+    // Iniciar exportação como job em background
+    const job = await exportService.createExportJob(userId, 'full_app', 'zip');
     
-    // Caminho do arquivo ZIP final
-    const zipFilePath = path.join(exportDir, 'videogenie_app_export.zip');
+    log(`Iniciando exportação completa do aplicativo (Job ID: ${job.id})`, 'export-api');
     
-    // Configurar arquivo ZIP
-    const output = fs.createWriteStream(zipFilePath);
-    const archive = archiver('zip', {
-      zlib: { level: 9 }
-    });
-    
-    // Configurar event handlers antes de finalizar o arquivo
-    output.on('close', () => {
-      // Verificar se o arquivo foi criado com sucesso
-      if (fs.existsSync(zipFilePath)) {
-        const stats = fs.statSync(zipFilePath);
-        log(`Arquivo ZIP criado com sucesso: ${zipFilePath} (${stats.size} bytes)`, 'export-api');
-        
-        // Definir cabeçalhos de download adequados
-        res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', 'attachment; filename="videogenie_app_export.zip"');
-        res.setHeader('Content-Length', stats.size);
-        
-        // Enviar o arquivo como stream
-        const fileStream = fs.createReadStream(zipFilePath);
-        fileStream.pipe(res);
-        
-        // Configurar limpeza após 5 minutos
-        setTimeout(() => {
-          try {
-            if (fs.existsSync(zipFilePath)) {
-              fs.unlinkSync(zipFilePath);
-              log(`Arquivo ZIP removido após download: ${zipFilePath}`, 'export-api');
-            }
-            if (fs.existsSync(exportDir)) {
-              fs.rmdirSync(exportDir, { recursive: true });
-            }
-          } catch (cleanupError) {
-            log(`Erro ao limpar arquivos temporários: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`, 'export-api');
-          }
-        }, 5 * 60 * 1000); // Limpar depois de 5 minutos
-      } else {
-        log(`Erro: arquivo ZIP não encontrado após criação: ${zipFilePath}`, 'export-api');
-        res.status(500).json({
-          success: false,
-          error: 'Erro ao criar arquivo de exportação'
+    // Aguardar a conclusão do trabalho com timeout
+    let completed = false;
+    const timeout = setTimeout(() => {
+      if (!completed) {
+        log(`Timeout na exportação completa do aplicativo (Job ID: ${job.id})`, 'export-api');
+        res.status(202).json({
+          success: true,
+          message: 'Exportação iniciada mas ainda em processamento',
+          jobId: job.id,
+          downloadUrl: `/api/export/download/${job.id}`
         });
       }
+    }, 30000); // 30 segundos de timeout
+    
+    // Verificar status periodicamente
+    await new Promise<void>((resolve) => {
+      const checkStatus = async () => {
+        const updatedJob = await storage.getExportJob(job.id);
+        if (updatedJob && (updatedJob.status === 'completed' || updatedJob.status === 'failed')) {
+          clearTimeout(timeout);
+          completed = true;
+          resolve();
+        } else {
+          setTimeout(checkStatus, 1000);
+        }
+      };
+      
+      setTimeout(checkStatus, 1000);
     });
     
-    archive.on('error', (err) => {
-      log(`Erro ao criar arquivo ZIP: ${err.message}`, 'export-api');
+    // Obter job atualizado
+    const updatedJob = await storage.getExportJob(job.id);
+    
+    if (updatedJob && updatedJob.status === 'completed' && updatedJob.filePath) {
+      // Definir nome adequado para download
+      const stats = fs.statSync(updatedJob.filePath);
+      const downloadName = `videogenie_app_export.zip`;
+      
+      // Definir cabeçalhos de download adequados
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+      res.setHeader('Content-Length', stats.size);
+      
+      // Enviar o arquivo como stream
+      const fileStream = exportService.getExportFileStream(updatedJob.filePath);
+      fileStream.pipe(res);
+      
+      // Configurar limpeza após download (temporizador está na exportService)
+    } else {
+      // Se falhou, informar ao usuário
       res.status(500).json({
         success: false,
-        error: 'Erro ao criar arquivo de exportação'
+        error: updatedJob?.error || 'Erro ao criar arquivo de exportação',
+        jobId: job.id
       });
-    });
-    
-    // Vincular arquivo e saída
-    archive.pipe(output);
-    
-    // Diretórios a ignorar
-    const ignoredDirs = [
-      'node_modules',
-      '.git',
-      '.replit',
-      'dist',
-      'build',
-      'coverage',
-      '.cache',
-      '.github',
-      '.vscode',
-      'test_videos'
-    ];
-    
-    // Excluir diretórios grandes, mas incluir alguns arquivos de uploads para exemplo
-    const specialDirs = ['uploads'];
-    
-    // Adicionar arquivos e diretórios ao ZIP
-    const rootDir = process.cwd();
-    const entries = fs.readdirSync(rootDir, { withFileTypes: true });
-    
-    // Adicionar README com instruções
-    const readmeContent = `# VideoGenie App Export
-    
-Data de exportação: ${new Date().toISOString()}
-
-## Conteúdo deste arquivo
-Este arquivo ZIP contém o código fonte completo do aplicativo VideoGenie, incluindo:
-
-1. Todos os arquivos fonte (TypeScript, React, CSS, etc.)
-2. Configurações e dependências
-3. Amostras de dados
-4. Estrutura de diretórios
-
-## Como usar
-Para usar este código:
-
-1. Extraia o conteúdo deste arquivo ZIP
-2. Instale as dependências com \`npm install\`
-3. Inicie o servidor com \`npm run dev\`
-
-## Módulos principais
-- server/: Contém o código do backend (API Express)
-- client/: Contém o código do frontend (React)
-- shared/: Contém os tipos e schemas compartilhados
-- uploads/: Contém amostras de arquivos gerados
-
-## Configuração de APIs
-Para usar completamente este aplicativo, você precisará configurar suas próprias chaves de API:
-
-- OpenAI API
-- Google TTS API
-- HuggingFace API
-- Mistral API
-- Pexels API
-
-## Suporte
-Para mais informações, consulte a documentação incluída no diretório \`docs/\`.
-`;
-    
-    // Adicionar arquivo README
-    const readmePath = path.join(exportDir, 'README.md');
-    fs.writeFileSync(readmePath, readmeContent);
-    archive.file(readmePath, { name: 'README.md' });
-    
-    // Adicionar cada entrada no diretório raiz
-    for (const entry of entries) {
-      const entryPath = path.join(rootDir, entry.name);
-      
-      // Pular diretórios ignorados
-      if (ignoredDirs.includes(entry.name)) {
-        continue;
-      }
-      
-      // Tratar diretórios especiais
-      if (specialDirs.includes(entry.name)) {
-        if (entry.name === 'uploads') {
-          // Apenas incluir alguns arquivos de amostra da pasta uploads
-          try {
-            // Criar diretório uploads no ZIP
-            archive.append('', { name: 'uploads/' });
-            
-            // Adicionar subdiretórios vazios para manter a estrutura
-            ['videos', 'images', 'audio', 'temp'].forEach(subdir => {
-              archive.append('', { name: `uploads/${subdir}/` });
-            });
-            
-            // Adicionar arquivo de espaço reservado
-            const placeholderContent = 'Este diretório armazena arquivos gerados pelo aplicativo.';
-            archive.append(placeholderContent, { name: 'uploads/README.txt' });
-            
-            // Adicionar alguns arquivos de amostra, se existirem
-            const videoDir = path.join(rootDir, 'uploads/videos');
-            const imageDir = path.join(rootDir, 'uploads/images');
-            
-            if (fs.existsSync(videoDir)) {
-              const videoFiles = fs.readdirSync(videoDir).slice(0, 2); // Limitar a 2 vídeos
-              videoFiles.forEach(file => {
-                const filePath = path.join(videoDir, file);
-                if (fs.statSync(filePath).isFile() && fs.statSync(filePath).size < 10 * 1024 * 1024) {
-                  archive.file(filePath, { name: `uploads/videos/${file}` });
-                }
-              });
-            }
-            
-            if (fs.existsSync(imageDir)) {
-              const imageFiles = fs.readdirSync(imageDir).slice(0, 5); // Limitar a 5 imagens
-              imageFiles.forEach(file => {
-                const filePath = path.join(imageDir, file);
-                if (fs.statSync(filePath).isFile()) {
-                  archive.file(filePath, { name: `uploads/images/${file}` });
-                }
-              });
-            }
-          } catch (error) {
-            log(`Erro ao processar diretório de uploads: ${error instanceof Error ? error.message : String(error)}`, 'export-api');
-          }
-          continue;
-        }
-      }
-      
-      // Adicionar arquivo ou diretório regular
-      if (entry.isFile()) {
-        archive.file(entryPath, { name: entry.name });
-      } else if (entry.isDirectory()) {
-        // Para diretórios, adicionar recursivamente sem os diretórios ignorados
-        await addDirectoryToArchiveFiltered(archive, rootDir, entry.name, ignoredDirs);
-      }
     }
-    
-    // Finalizar o arquivo
-    archive.finalize();
   } catch (error) {
     log(`Erro na exportação do aplicativo: ${error instanceof Error ? error.message : String(error)}`, 'export-api');
     res.status(500).json({
