@@ -3,8 +3,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiForm } from "@/components/api-settings/api-form";
 import { SocialMediaForm } from "@/components/api-settings/social-media-form";
 import { useApiSettings } from "@/hooks/use-api-settings";
-import { Image, Mic, Bot, Video, Instagram, Sparkles, Brain } from "lucide-react";
+import { Image, Mic, Bot, Video, Instagram, Sparkles, Brain, Plus, Key } from "lucide-react";
 import { BrandTiktok } from "@/components/ui/brand-icons";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 
 function PageHeader() {
   return (
@@ -13,6 +19,163 @@ function PageHeader() {
         <h2 className="font-bold text-xl text-gray-800">Configurações</h2>
       </div>
     </header>
+  );
+}
+
+function CustomApiForm() {
+  const [apiName, setApiName] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiUrl, setApiUrl] = useState("");
+  const [apiType, setApiType] = useState("ai");
+  const [isSaving, setIsSaving] = useState(false);
+  const queryClient = useQueryClient();
+  
+  const handleSaveCustomApi = async () => {
+    if (!apiName || !apiKey) {
+      alert("Por favor, preencha o nome da API e a chave API.");
+      return;
+    }
+    
+    setIsSaving(true);
+    
+    try {
+      await apiRequest("POST", "/api/settings", {
+        service: apiName.toLowerCase().replace(/\s+/g, "_"),
+        apiKey,
+        apiUrl: apiUrl || undefined,
+        apiType,
+        userId: 1, // Demo user ID
+        isActive: true,
+        isCustom: true
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      
+      // Limpar o formulário
+      setApiName("");
+      setApiKey("");
+      setApiUrl("");
+      setApiType("ai");
+      
+      alert("API personalizada adicionada com sucesso!");
+    } catch (error) {
+      console.error("Erro ao salvar API personalizada:", error);
+      alert("Erro ao salvar API personalizada. Verifique o console para detalhes.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Adicionar API Personalizada</CardTitle>
+        <CardDescription>Configure suas próprias APIs para uso no sistema</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Nome da API
+          </label>
+          <Input
+            value={apiName}
+            onChange={(e) => setApiName(e.target.value)}
+            placeholder="Ex: Claude AI, Elevenlab, Stability AI"
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Tipo de API
+          </label>
+          <Select value={apiType} onValueChange={setApiType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Escolha o tipo de API" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ai">IA / Geração de Conteúdo</SelectItem>
+              <SelectItem value="tts">Texto para Voz</SelectItem>
+              <SelectItem value="image">Imagens</SelectItem>
+              <SelectItem value="video">Vídeo</SelectItem>
+              <SelectItem value="other">Outro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            URL da API (opcional)
+          </label>
+          <Input
+            value={apiUrl}
+            onChange={(e) => setApiUrl(e.target.value)}
+            placeholder="Ex: https://api.exemplo.com/v1"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Deixe em branco para usar a URL padrão da API
+          </p>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Chave API
+          </label>
+          <Input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Sua chave API secreta"
+          />
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button
+          onClick={handleSaveCustomApi}
+          disabled={isSaving}
+          className="w-full"
+        >
+          {isSaving ? "Salvando..." : "Adicionar API Personalizada"}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function CustomApiList({ apiSettings }) {
+  const customApis = apiSettings?.filter(api => api.isCustom) || [];
+  
+  return (
+    <div className="space-y-4">
+      {customApis.length > 0 ? (
+        customApis.map((api) => (
+          <div 
+            key={api.id} 
+            className="bg-white border border-gray-200 rounded-lg p-4 flex justify-between items-center"
+          >
+            <div>
+              <h4 className="font-medium">{api.service}</h4>
+              <p className="text-sm text-gray-500">
+                {api.apiType === "ai" && "IA / Geração de Conteúdo"}
+                {api.apiType === "tts" && "Texto para Voz"}
+                {api.apiType === "image" && "Imagens"}
+                {api.apiType === "video" && "Vídeo"}
+                {api.apiType === "other" && "Outro"}
+              </p>
+            </div>
+            <div className="flex items-center text-green-600">
+              <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+              Conectado
+            </div>
+          </div>
+        ))
+      ) : (
+        <div className="text-center py-6 text-gray-500">
+          <Key className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+          <p>Nenhuma API personalizada configurada</p>
+          <p className="text-sm">Use o formulário acima para adicionar suas próprias APIs</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -33,6 +196,7 @@ export default function Settings() {
             <Tabs defaultValue="media-apis" className="mb-4">
               <TabsList className="mb-4">
                 <TabsTrigger value="media-apis">APIs de Mídia</TabsTrigger>
+                <TabsTrigger value="custom-apis">APIs Personalizadas</TabsTrigger>
                 <TabsTrigger value="social">Redes Sociais</TabsTrigger>
                 <TabsTrigger value="advanced">Configurações Avançadas</TabsTrigger>
               </TabsList>
@@ -129,6 +293,38 @@ export default function Settings() {
                     <button className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-lg transition">
                       Verificar
                     </button>
+                  </div>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="custom-apis" className="space-y-6">
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium mb-2">Configurar APIs Personalizadas</h3>
+                  <div className="p-4 bg-blue-50 rounded-md mb-4">
+                    <p className="text-sm text-blue-700">
+                      Adicione suas próprias APIs ao sistema. Você pode configurar qualquer API externa para ser usada no processo de geração de vídeos.
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <CustomApiForm />
+                    
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-lg mb-2">APIs Personalizadas Configuradas</h4>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Essas são as APIs personalizadas que você adicionou ao sistema.
+                        </p>
+                        <CustomApiList apiSettings={apiSettings} />
+                      </div>
+                      
+                      <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                        <h4 className="font-medium text-amber-800 mb-2">Dica de Uso</h4>
+                        <p className="text-sm text-amber-700">
+                          As APIs personalizadas são usadas automaticamente pelo sistema quando as APIs padrão não estão disponíveis ou retornam erros. Isso garante que seu sistema continue funcionando mesmo quando um provedor específico estiver com problemas.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </TabsContent>

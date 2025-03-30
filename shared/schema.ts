@@ -13,9 +13,12 @@ export const users = pgTable("users", {
 export const apiSettings = pgTable("api_settings", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
-  service: text("service").notNull(), // pexels, google_tts, openai, tiktok, instagram
+  service: text("service").notNull(), // pexels, google_tts, openai, tiktok, instagram ou nome personalizado
   apiKey: text("api_key").notNull(),
   isActive: boolean("is_active").default(true),
+  apiUrl: text("api_url"), // URL opcional para APIs personalizadas
+  apiType: text("api_type"), // ai, tts, image, video, other
+  isCustom: boolean("is_custom").default(false), // indica se é uma API personalizada
 });
 
 export const videos = pgTable("videos", {
@@ -80,6 +83,9 @@ export const insertApiSettingSchema = createInsertSchema(apiSettings).pick({
   service: true,
   apiKey: true,
   isActive: true,
+  apiUrl: true,
+  apiType: true,
+  isCustom: true,
 });
 
 export const insertVideoSchema = createInsertSchema(videos).pick({

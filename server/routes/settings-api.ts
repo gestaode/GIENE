@@ -42,7 +42,7 @@ router.post('/', async (req, res) => {
 // Testar uma configuração de API
 router.post('/test', async (req, res) => {
   try {
-    const { service, apiKey } = req.body;
+    const { service, apiKey, apiUrl, apiType, isCustom } = req.body;
     
     if (!service || !apiKey) {
       return res.status(400).json({
@@ -55,20 +55,20 @@ router.post('/test', async (req, res) => {
     const userId = 1; // ID de usuário padrão
     const existingSetting = await storage.getApiSettingByService(userId, service);
     
+    const apiSettings = {
+      userId,
+      service,
+      apiKey,
+      isActive: true,
+      apiUrl: apiUrl || undefined,
+      apiType: apiType || undefined,
+      isCustom: isCustom || false
+    };
+    
     if (existingSetting) {
-      await storage.updateApiSetting(existingSetting.id, {
-        userId,
-        service,
-        apiKey,
-        isActive: true
-      });
+      await storage.updateApiSetting(existingSetting.id, apiSettings);
     } else {
-      await storage.createApiSetting({
-        userId,
-        service,
-        apiKey,
-        isActive: true
-      });
+      await storage.createApiSetting(apiSettings);
     }
     
     // Agora que a chave API está armazenada, podemos testar o serviço
