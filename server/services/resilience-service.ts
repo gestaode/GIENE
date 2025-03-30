@@ -126,12 +126,18 @@ export class ResilienceService {
    * Executa um teste específico
    * @param service Nome do serviço a ser testado
    * @param options Opções adicionais para o teste
+   * @returns O resultado do teste
    */
-  async runTest(service: string, options?: any): Promise<void> {
+  async runTest(service: string, options?: any): Promise<ResilienceTestResult> {
     const testFunction = this.tests.get(service);
     if (!testFunction) {
       log(`Teste não encontrado para o serviço: ${service}`, "resilience-service");
-      return;
+      return {
+        success: false,
+        responseTime: 0,
+        fallbackUsed: false,
+        errorMessage: `Serviço ${service} não encontrado`
+      };
     }
     
     log(`Executando teste de resiliência para o serviço: ${service}`, "resilience-service");
@@ -156,6 +162,7 @@ export class ResilienceService {
       await storage.createResilienceTest(testData);
       
       log(`Teste concluído para ${service}: ${result.success ? 'Sucesso' : 'Falha'} (${responseTime}ms)`, "resilience-service");
+      return result;
     } catch (error) {
       log(`Erro ao executar teste para o serviço ${service}: ${error.message}`, "resilience-service");
       
@@ -172,7 +179,39 @@ export class ResilienceService {
       };
       
       await storage.createResilienceTest(testData);
+      
+      return {
+        success: false,
+        responseTime: 0,
+        fallbackUsed: false,
+        errorMessage: error.message
+      };
     }
+  }
+  
+  /**
+   * Obtém o status de todos os serviços registrados
+   * @returns Um mapa com o status de cada serviço
+   */
+  async getServiceStatus(): Promise<Record<string, ResilienceTestResult>> {
+    const services = Array.from(this.tests.keys());
+    const results: Record<string, ResilienceTestResult> = {};
+    
+    for (const service of services) {
+      try {
+        const result = await this.runTest(service);
+        results[service] = result;
+      } catch (error) {
+        results[service] = {
+          success: false,
+          responseTime: 0,
+          fallbackUsed: false,
+          errorMessage: error.message
+        };
+      }
+    }
+    
+    return results;
   }
   
   /**

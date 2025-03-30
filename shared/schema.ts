@@ -370,3 +370,15 @@ export type ExportJob = typeof exportJobs.$inferSelect;
 
 export type InsertResilienceTest = z.infer<typeof insertResilienceTestSchema>;
 export type ResilienceTest = typeof resilienceTests.$inferSelect;
+
+// Interface para status dos serviços de API
+export interface APIServiceStatus {
+  status: 'online' | 'degraded' | 'offline';
+  timestamp: string;
+  services: Array<{
+    name: string;
+    status: 'connected' | 'error' | 'not_configured';
+    message?: string;
+    lastChecked: string;
+  }>;
+}
