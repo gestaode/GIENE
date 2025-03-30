@@ -994,7 +994,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log("Iniciando teste simples de criação de vídeo...");
       
-      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      const ffmpegService = new FFmpegService();
       const testText = "Teste do VideoGenie";
       const outputFileName = `simple_test_${Date.now()}.mp4`;
       
@@ -1004,7 +1004,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         outputFileName,
         width: 1080,
         height: 1920,
-        frameRate: 30
+        frameRate: 30,
+        duration: 5
       });
       
       console.log(`Vídeo de teste criado com sucesso: ${outputPath}`);
@@ -1020,6 +1021,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: "Erro ao criar vídeo de teste",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // Nova rota de teste para verificar a funcionalidade completa de geração de vídeos
+  app.post("/api/video/test-complete-workflow", async (req: Request, res: Response) => {
+    try {
+      console.log("Iniciando teste completo de fluxo de geração de vídeo...");
+      
+      // Criar pasta temporária
+      const testDir = './uploads/test';
+      if (!fs.existsSync(testDir)) {
+        fs.mkdirSync(testDir, { recursive: true });
+      }
+      
+      // Criar imagens de teste
+      const imageSize = { width: 1080, height: 1920 };
+      const colors = ['#ff5733', '#33ff57', '#3357ff'];
+      const imagePaths = [];
+      
+      for (let i = 0; i < 3; i++) {
+        const imagePath = path.join(testDir, `test_image_${i + 1}.png`);
+        
+        // Criar imagem simples com canvas
+        const { createCanvas } = require('canvas');
+        const canvas = createCanvas(imageSize.width, imageSize.height);
+        const ctx = canvas.getContext('2d');
+        
+        // Preencher com cor de fundo
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(0, 0, imageSize.width, imageSize.height);
+        
+        // Adicionar texto
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 60px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Imagem de Teste ${i + 1}`, imageSize.width / 2, imageSize.height / 2);
+        
+        // Salvar a imagem
+        const buffer = canvas.toBuffer('image/png');
+        fs.writeFileSync(imagePath, buffer);
+        imagePaths.push(imagePath);
+      }
+      
+      console.log(`Imagens de teste criadas: ${imagePaths.join(', ')}`);
+      
+      // Criar áudio de teste (silencioso)
+      const ffmpegService = new FFmpegService();
+      const audioPath = path.join(testDir, 'test_audio.mp3');
+      await ffmpegService.createSilentAudio(audioPath, 10);
+      
+      console.log(`Áudio de teste criado: ${audioPath}`);
+      
+      // Criar vídeo a partir das imagens
+      const outputFileName = `test_full_workflow_${Date.now()}.mp4`;
+      const videoOptions = {
+        imagePaths,
+        outputFileName,
+        duration: 3,
+        transition: 'fade',
+        transitionDuration: 0.5,
+        width: 1080,
+        height: 1920,
+        textOverlay: "Teste de Geração de Vídeo",
+        textPosition: 'bottom',
+        textColor: '#FFFFFF',
+        textFont: 'Arial',
+        textAnimation: 'none',
+        fps: 30,
+        zoomEffect: true,
+        colorGrading: 'vibrant',
+        audioPath,
+        outputQuality: 'medium',
+        social: 'tiktok'
+      };
+      
+      console.log("Gerando vídeo a partir das imagens...");
+      const videoPath = await ffmpegService.createVideoFromImages(videoOptions);
+      
+      // Verificar metadados do vídeo
+      const metadata = await ffmpegService.getVideoMetadata(videoPath);
+      
+      console.log("Teste completo finalizado com sucesso");
+      
+      res.status(200).json({
+        success: true,
+        filePath: videoPath,
+        fileName: path.basename(videoPath),
+        url: `/uploads/videos/${path.basename(videoPath)}`,
+        metadata
+      });
+    } catch (error) {
+      console.error("Erro no teste completo:", error);
+      res.status(500).json({
+        success: false,
+        message: "Erro ao executar teste completo",
         error: error instanceof Error ? error.message : String(error)
       });
     }
@@ -1479,7 +1577,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         width: width ? parseInt(width) : undefined,
         height: height ? parseInt(height) : undefined,
         frameRate: frameRate ? parseInt(frameRate) : undefined,
-        bitrate: bitrate || undefined,
+        // Removido bitrate pois não está definido na interface TextVideoOptions
       });
       
       // Get video metadata
@@ -2549,6 +2647,207 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(test);
     } catch (error) {
       return errorResponse(res, 500, "Error registering resilience test", error);
+    }
+  });
+  
+  // Rota para teste rápido do FFmpeg
+  app.get("/api/video/test-ffmpeg", async (_req: Request, res: Response) => {
+    try {
+      const ffmpegService = new FFmpegService();
+      
+      // Verificar versão do FFmpeg
+      const version = await ffmpegService.getVersion();
+      
+      // Criar diretório de teste se não existir
+      const testDir = './uploads/test';
+      if (!fs.existsSync(testDir)) {
+        fs.mkdirSync(testDir, { recursive: true });
+      }
+      
+      // Criar uma imagem simples para teste
+      const { createCanvas } = require('canvas');
+      const canvas = createCanvas(640, 480);
+      const ctx = canvas.getContext('2d');
+      
+      // Preencher fundo
+      ctx.fillStyle = '#3357ff';
+      ctx.fillRect(0, 0, 640, 480);
+      
+      // Adicionar texto
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 36px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Teste FFmpeg', 320, 240);
+      
+      // Salvar imagem
+      const buffer = canvas.toBuffer('image/png');
+      const imagePath = path.join(testDir, 'test_ffmpeg.png');
+      fs.writeFileSync(imagePath, buffer);
+      
+      // Criar vídeo simples a partir da imagem
+      const outputFileName = `test_ffmpeg_${Date.now()}.mp4`;
+      const outputPath = await ffmpegService.createVideoFromImages({
+        imagePaths: [imagePath],
+        outputFileName,
+        duration: 5,
+        width: 640,
+        height: 480
+      });
+      
+      res.status(200).json({
+        success: true,
+        message: "Teste de FFmpeg executado com sucesso",
+        version,
+        videoPath: outputPath,
+        videoUrl: `/uploads/videos/${path.basename(outputPath)}`
+      });
+    } catch (error) {
+      console.error("Erro no teste do FFmpeg:", error);
+      res.status(500).json({
+        success: false, 
+        message: "Erro ao testar FFmpeg", 
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Endpoint para criar um vídeo simples com texto para teste
+  app.post("/api/video/create-simple-test", async (req: Request, res: Response) => {
+    try {
+      console.log("Iniciando teste simples de criação de vídeo com texto");
+      
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
+      // Criar um texto de teste em português
+      const textoDeTeste = "Testando a criação de vídeo com texto em português. VideoGenie funcionando!";
+      
+      // Nome do arquivo de saída
+      const outputFileName = `text_video_test_${Date.now()}.mp4`;
+      
+      // Criar o vídeo
+      const outputPath = await ffmpegService.createTextVideo(textoDeTeste, {
+        outputFileName,
+        width: 1080,
+        height: 1920,
+        backgroundColor: 'black',
+        textColor: 'white',
+        fontFamily: 'Arial',
+        fontSize: 60,
+        frameRate: 30,
+        duration: 5,
+        bitrate: '2M'
+      });
+      
+      console.log(`Vídeo de teste criado: ${outputPath}`);
+      
+      // Obter metadados do vídeo (não é essencial, mas útil para debug)
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
+      res.status(200).json({
+        success: true,
+        message: "Vídeo de teste com texto criado com sucesso",
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        fileName: path.basename(outputPath),
+        filePath: outputPath,
+        metadata
+      });
+    } catch (error) {
+      console.error("Erro ao criar vídeo de teste com texto:", error);
+      res.status(500).json({
+        success: false,
+        message: "Erro ao criar vídeo de teste com texto",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // Endpoint para testar o fluxo completo de criação de vídeo
+  app.post("/api/video/test-complete-workflow", async (req: Request, res: Response) => {
+    try {
+      console.log("Iniciando teste de fluxo completo de criação de vídeo");
+      
+      // 1. Criação das imagens para o teste (assumimos que já existem)
+      const imagesDir = path.join(process.cwd(), 'uploads/images');
+      
+      // Verificar se o diretório de imagens existe
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+      }
+      
+      // Verificar se há pelo menos uma imagem no diretório
+      const imagesFiles = fs.readdirSync(imagesDir);
+      
+      if (imagesFiles.length === 0) {
+        // Se não houver imagens, criar uma imagem de teste com texto
+        const testImagePath = path.join(imagesDir, 'test_image.png');
+        
+        // Criar imagem usando a função de texto para vídeo
+        await ffmpegService.createTextVideo("Imagem de Teste", {
+          outputFileName: testImagePath,
+          width: 1080,
+          height: 1920,
+          backgroundColor: 'blue',
+          textColor: 'white',
+          duration: 1
+        });
+        
+        return res.status(200).json({
+          success: false,
+          message: "Não há imagens para criar o vídeo. Uma imagem de teste foi criada, tente novamente."
+        });
+      }
+      
+      const imagePaths = imagesFiles
+        .filter(file => ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(file).toLowerCase()))
+        .map(file => path.join(imagesDir, file))
+        .slice(0, 5); // Limitar a 5 imagens para o teste
+      
+      if (imagePaths.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Não há imagens válidas para criar o vídeo."
+        });
+      }
+      
+      // 2. Criar o vídeo a partir das imagens
+      console.log(`Criando vídeo a partir de ${imagePaths.length} imagens`);
+      
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
+      const outputFileName = `complete_test_video_${Date.now()}.mp4`;
+      const outputPath = await ffmpegService.createVideoFromImages({
+        imagePaths,
+        outputFileName,
+        duration: 3,
+        transition: 'fade',
+        transitionDuration: 0.5,
+        width: 1080,
+        height: 1920,
+        textOverlay: "Vídeo de Teste Completo",
+        textPosition: "bottom",
+        textColor: "white",
+        fps: 30,
+        zoomEffect: true,
+        colorGrading: "vibrant",
+        outputQuality: "high"
+      });
+      
+      console.log(`Vídeo de teste completo criado: ${outputPath}`);
+      
+      res.status(200).json({
+        success: true,
+        message: "Fluxo completo de criação de vídeo executado com sucesso",
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        fileName: path.basename(outputPath),
+        filePath: outputPath
+      });
+    } catch (error) {
+      console.error("Erro no teste de fluxo completo:", error);
+      res.status(500).json({
+        success: false,
+        message: "Erro ao executar fluxo completo de criação de vídeo",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
   
