@@ -41,27 +41,55 @@ router.get(`${API_PREFIX}/videos`, async (req, res) => {
 // Rota para criação avançada de vídeos (mock para testes)
 router.post(`${API_PREFIX}/video/create-advanced`, async (req, res) => {
   try {
-    const { title, options } = req.body;
+    const { 
+      imagePaths, 
+      outputFileName, 
+      text, 
+      duration, 
+      transition, 
+      social 
+    } = req.body;
+    
+    console.log(`Requisição de criação de vídeo recebida:`, {
+      imagePaths: Array.isArray(imagePaths) ? imagePaths.length : 'não é array',
+      outputFileName,
+      text: text?.substring(0, 20) + '...',
+      duration,
+      transition,
+      social
+    });
     
     const videoData = {
       userId: 1,
-      title: title || 'Vídeo Teste',
-      description: 'Descrição de teste',
-      status: 'draft',
+      title: text?.substring(0, 30) || 'Vídeo Teste',
+      description: 'Vídeo criado com o sistema VideoGenie',
+      status: 'completed',
       theme: 'business',
-      tags: ['teste', 'video'],
-      thumbnailUrl: null,
-      videoUrl: null,
-      platform: ['tiktok'],
-      scriptContent: 'Conteúdo de teste para script',
-      mediaRefs: []
+      tags: ['teste', 'video', social],
+      thumbnailUrl: imagePaths && imagePaths.length > 0 ? imagePaths[0] : null,
+      videoUrl: `/uploads/videos/${outputFileName || `test_video_${Date.now()}.mp4`}`,
+      platform: [social || 'tiktok'],
+      scriptContent: text || 'Conteúdo de teste para script',
+      mediaRefs: imagePaths || []
     };
     
     const video = await storage.createVideo(videoData);
-    res.json(video);
+    
+    // Retornar resposta formatada para compatibilidade com a interface
+    res.json({
+      success: true,
+      url: video.videoUrl,
+      id: video.id,
+      title: video.title,
+      thumbnailUrl: video.thumbnailUrl,
+      message: 'Vídeo criado com sucesso'
+    });
   } catch (error) {
     console.error('Erro ao criar vídeo avançado:', error);
-    res.status(500).json({ error: 'Erro ao criar vídeo avançado' });
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Erro ao criar vídeo avançado' 
+    });
   }
 });
 

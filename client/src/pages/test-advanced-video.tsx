@@ -19,9 +19,9 @@ const TestAdvancedVideo = () => {
   // Configurações básicas
   const [outputFileName, setOutputFileName] = useState(`test_video_${Date.now()}.mp4`);
   const [imagePaths, setImagePaths] = useState<string[]>([
-    "/uploads/test/image1.jpg",
-    "/uploads/test/image2.jpg",
-    "/uploads/test/image3.jpg",
+    "../uploads/test/image1.jpg",
+    "../uploads/test/image2.jpg",
+    "../uploads/test/image3.jpg",
   ]);
   const [text, setText] = useState("Texto de demonstração para o vídeo");
   const [duration, setDuration] = useState(3);
@@ -124,7 +124,28 @@ const TestAdvancedVideo = () => {
         description: "Analisando resposta do servidor...",
       });
       
-      const data = await response.json();
+      // Verificar se a resposta é vazia antes de tentar analisar como JSON
+      let data;
+      const responseText = await response.text();
+      
+      console.log('Resposta do servidor:', responseText);
+      
+      try {
+        // Tentar converter a resposta para JSON apenas se houver conteúdo
+        if (responseText && responseText.trim()) {
+          data = JSON.parse(responseText);
+        } else {
+          throw new Error('Resposta vazia do servidor');
+        }
+      } catch (jsonError) {
+        console.error('Erro ao analisar JSON:', jsonError);
+        toast({
+          title: "Erro ao processar resposta",
+          description: `Falha ao analisar resposta do servidor: ${jsonError instanceof Error ? jsonError.message : 'Formato inválido'}`,
+          variant: "destructive",
+        });
+        return;
+      }
 
       if (response.ok && data.success) {
         setVideoUrl(data.url);
