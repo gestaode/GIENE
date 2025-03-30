@@ -1,27 +1,70 @@
-name: Sync Replit with GitHub
+name: Sincronizar com GitHub
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches:
+      - main
+      - development
   workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      
-      - name: Setup Git Config
+
+      - name: Configurar Git
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-      
-      - name: Sync Changes
-        run: |
-          echo "Sincronizando alterações entre GitHub e Replit"
-          # Este comando é um placeholder - na integração real, você usaria
-          # comandos específicos para sincronizar com seu replit
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Push para o GitHub
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+  # Testes automatizados (futuramente)
+  test:
+    needs: sync
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/development'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Adicionar testes quando implementados
+      - name: Verificar formato do código
+        run: echo "Verificação de formato do código será implementada"
+
+  # Deploy automatizado (futuramente)
+  deploy:
+    needs: [sync, test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Adicionar deploy quando implementado
+      - name: Deploy
+        run: echo "Deploy será implementado"
