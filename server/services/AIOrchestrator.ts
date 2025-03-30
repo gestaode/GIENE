@@ -186,7 +186,7 @@ export class AIOrchestrator {
    */
   async generateSocialMediaContent(
     videoScript: string,
-    options: ContentGenerationOptions = {}
+    options: ContentGenerationOptions | any = {}
   ): Promise<GeneratedContent> {
     // Limpa o registro de erros anteriores
     this.errors = {};
@@ -267,7 +267,9 @@ export class AIOrchestrator {
       .slice(0, count);
     
     // Remover duplicados
-    const uniqueTags = [...new Set(possibleTags)];
+    const uniqueTags = possibleTags.filter((value, index, self) => 
+      self.indexOf(value) === index
+    );
     
     // Construir resultado de emergência
     return {

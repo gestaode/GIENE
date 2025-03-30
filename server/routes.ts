@@ -36,6 +36,9 @@ import { GoogleCloudTTSService } from "./services/google-cloud-tts";
 import { ResponsiveVoiceService } from "./services/responsive-voice";
 import { PremiumBrazilianVoiceService } from "./services/premium-brazilian-voice";
 import { ElevenLabsService } from "./services/elevenlabs";
+import { AIOrchestrator } from "./services/AIOrchestrator";
+import { cacheService } from "./services/caching";
+import { socialMediaOrchestrator } from "./services/social-media-orchestrator";
 
 // Setup file storage paths
 const __filename = fileURLToPath(import.meta.url);
@@ -62,6 +65,14 @@ const storage_config = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage_config });
+
+// Inicializa o orquestrador de IA
+const aiOrchestrator = new AIOrchestrator(
+  process.env.MISTRAL_API_KEY || '',
+  process.env.HUGGINGFACE_API_KEY || '',
+  process.env.OPENAI_API_KEY || '',
+  process.env.GOOGLE_AI_API_KEY || ''
+);
 
 // Service initialization function
 function initializeService(req: Request, serviceName: string) {
@@ -1750,5 +1761,260 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Create HTTP server
   const httpServer = createServer(app);
+  // 7. Rotas para o sistema de orquestração AI com cache e fallback
+  app.post("/api/ai/generate-script", async (req: Request, res: Response) => {
+    try {
+      const {
+        theme,
+        targetAudience,
+        duration,
+        tone,
+        keywords,
+        additionalInstructions
+      } = req.body;
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme is required" });
+      }
+      
+      // Uso do cache para scripts similares
+      const cacheKey = `script:${theme}:${targetAudience || 'geral'}:${tone || 'informativo'}`;
+      
+      const script = await cacheService.wrap(
+        cacheKey,
+        { theme, targetAudience, duration, tone, keywords, additionalInstructions },
+        async () => {
+          try {
+            return await aiOrchestrator.generateVideoScript({
+              theme,
+              targetAudience,
+              duration,
+              tone,
+              keywords,
+              additionalInstructions
+            });
+          } catch (error) {
+            throw error;
+          }
+        },
+        3600 // Cache válido por 1 hora
+      );
+      
+      res.status(200).json(script);
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao gerar roteiro de vídeo", error);
+    }
+  });
+
+  app.post("/api/ai/generate-content", async (req: Request, res: Response) => {
+    try {
+      const { videoScript, options } = req.body;
+      
+      if (!videoScript) {
+        return res.status(400).json({ message: "Video script is required" });
+      }
+      
+      // Uso do cache para conteúdo social media
+      const scriptHash = Buffer.from(videoScript).toString('base64').substring(0, 20);
+      const cacheKey = `social:${scriptHash}`;
+      
+      const content = await cacheService.wrap(
+        cacheKey,
+        { videoScript, options },
+        async () => {
+          try {
+            return await aiOrchestrator.generateSocialMediaContent(videoScript, options);
+          } catch (error) {
+            throw error;
+          }
+        },
+        3600 // Cache válido por 1 hora
+      );
+      
+      res.status(200).json(content);
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao gerar conteúdo para redes sociais", error);
+    }
+  });
+
+  app.get("/api/ai/trending-topics", async (req: Request, res: Response) => {
+    try {
+      const theme = req.query.theme as string;
+      const count = parseInt(req.query.count as string || '5');
+      
+      if (!theme) {
+        return res.status(400).json({ message: "Theme parameter is required" });
+      }
+      
+      // Uso do cache para tópicos em tendência
+      const cacheKey = `trending:${theme}:${count}`;
+      
+      const topics = await cacheService.wrap(
+        cacheKey,
+        { theme, count },
+        async () => {
+          try {
+            return await aiOrchestrator.suggestTrendingTopics(theme, count);
+          } catch (error) {
+            throw error;
+          }
+        },
+        1800 // Cache válido por 30 minutos (tópicos em tendência mudam mais rápido)
+      );
+      
+      res.status(200).json(topics);
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao obter tópicos em tendência", error);
+    }
+  });
+
+  app.get("/api/ai/status", async (req: Request, res: Response) => {
+    try {
+      // Retorna o status dos provedores de IA e erros recentes
+      const errors = aiOrchestrator.getLastErrors();
+      const hasMistral = !!process.env.MISTRAL_API_KEY;
+      const hasHuggingface = !!process.env.HUGGINGFACE_API_KEY;
+      const hasOpenAI = !!process.env.OPENAI_API_KEY;
+      const hasGemini = !!process.env.GOOGLE_AI_API_KEY;
+      
+      res.status(200).json({
+        providers: {
+          mistral: { available: hasMistral, error: errors['mistral'] || null },
+          huggingface: { available: hasHuggingface, error: errors['huggingface'] || null },
+          openai: { available: hasOpenAI, error: errors['openai'] || null },
+          gemini: { available: hasGemini, error: errors['gemini'] || null }
+        },
+        fallbackAvailable: hasMistral || hasHuggingface || hasOpenAI || hasGemini,
+        cacheStatus: cacheService.getStats()
+      });
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao verificar status dos serviços de IA", error);
+    }
+  });
+
+  // 8. Rotas para o sistema de automação de redes sociais
+  app.post("/api/social/schedule", async (req: Request, res: Response) => {
+    try {
+      const { videoPath, title, description, hashtags, platforms, scheduledTime } = req.body;
+      
+      if (!videoPath) {
+        return res.status(400).json({ message: "Video path is required" });
+      }
+      
+      if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
+        return res.status(400).json({ message: "At least one platform must be specified" });
+      }
+      
+      // Converter plataformas para o formato esperado pelo orquestrador
+      const accounts = platforms.map(platform => ({
+        platform,
+        accountId: 'default', // No futuro, isso viria do banco de dados do usuário
+        accessToken: process.env[`${platform.toUpperCase()}_ACCESS_TOKEN`] || ''
+      }));
+      
+      // Agendar a publicação
+      const postId = socialMediaOrchestrator.schedulePost(
+        {
+          videoPath,
+          title,
+          description,
+          hashtags: hashtags || [],
+          scheduledTime: scheduledTime ? new Date(scheduledTime) : undefined
+        },
+        accounts
+      );
+      
+      res.status(201).json({ 
+        postId, 
+        message: scheduledTime 
+          ? `Post agendado para ${new Date(scheduledTime).toLocaleString('pt-BR')}` 
+          : 'Post agendado para publicação imediata'
+      });
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao agendar publicação", error);
+    }
+  });
+
+  app.get("/api/social/posts", async (req: Request, res: Response) => {
+    try {
+      const status = req.query.status as string;
+      const posts = socialMediaOrchestrator.listPosts(status as any);
+      
+      res.status(200).json(posts);
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao listar publicações", error);
+    }
+  });
+
+  app.get("/api/social/posts/:id", async (req: Request, res: Response) => {
+    try {
+      const postId = req.params.id;
+      const post = socialMediaOrchestrator.getPostStatus(postId);
+      
+      if (!post) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+      
+      res.status(200).json(post);
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao obter status da publicação", error);
+    }
+  });
+
+  app.delete("/api/social/posts/:id", async (req: Request, res: Response) => {
+    try {
+      const postId = req.params.id;
+      const success = socialMediaOrchestrator.cancelScheduledPost(postId);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Post not found or cannot be cancelled" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao cancelar publicação", error);
+    }
+  });
+
+  app.get("/api/social/status", async (req: Request, res: Response) => {
+    try {
+      // Verificar o status das conexões com APIs de redes sociais
+      const apiStatus = await socialMediaOrchestrator.checkExternalAPIs();
+      const logs = socialMediaOrchestrator.getLogs().slice(-10); // Últimos 10 logs
+      
+      res.status(200).json({
+        apiStatus,
+        logs,
+        scheduledPosts: socialMediaOrchestrator.listPosts('scheduled').length,
+        processingPosts: socialMediaOrchestrator.listPosts('processing').length,
+        completedPosts: socialMediaOrchestrator.listPosts('completed').length,
+        failedPosts: socialMediaOrchestrator.listPosts('failed').length
+      });
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao verificar status das redes sociais", error);
+    }
+  });
+
+  // 9. Rotas para o sistema de cache
+  app.get("/api/cache/stats", async (req: Request, res: Response) => {
+    try {
+      const stats = cacheService.getStats();
+      
+      res.status(200).json(stats);
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao obter estatísticas de cache", error);
+    }
+  });
+
+  app.post("/api/cache/clear", async (req: Request, res: Response) => {
+    try {
+      await cacheService.clear();
+      
+      res.status(200).json({ message: "Cache limpo com sucesso" });
+    } catch (error) {
+      errorResponse(res, 500, "Erro ao limpar cache", error);
+    }
+  });
+
   return httpServer;
 }
