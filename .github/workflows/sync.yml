@@ -1,0 +1,27 @@
+name: Sync Replit with GitHub
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Git Config
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+      
+      - name: Sync Changes
+        run: |
+          echo "Sincronizando alterações entre GitHub e Replit"
+          # Este comando é um placeholder - na integração real, você usaria
+          # comandos específicos para sincronizar com seu replit

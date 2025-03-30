@@ -131,7 +131,15 @@ function initializeService(req: Request, serviceName: string) {
   }
 }
 
+// Importar rotas modularizadas
+import freeToolsRoutes from './routes/free-tools';
+import videoGenerationRoutes from './routes/video-generation';
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Registrar rotas modularizadas
+  app.use('/api/free-tools', freeToolsRoutes);
+  app.use('/api/videos/generator', videoGenerationRoutes);
+  
   // API Routes
   // 1. User Authentication Routes (simplified for demo)
   app.post("/api/auth/login", async (req: Request, res: Response) => {
