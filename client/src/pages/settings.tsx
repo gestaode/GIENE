@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiForm } from "@/components/api-settings/api-form";
 import { SocialMediaForm } from "@/components/api-settings/social-media-form";
 import { useApiSettings } from "@/hooks/use-api-settings";
-import { Image, Mic, Bot, Video, Instagram } from "lucide-react";
+import { Image, Mic, Bot, Video, Instagram, Sparkles, Brain } from "lucide-react";
 import { BrandTiktok } from "@/components/ui/brand-icons";
 
 function PageHeader() {
@@ -38,29 +38,80 @@ export default function Settings() {
               </TabsList>
               
               <TabsContent value="media-apis" className="space-y-6">
-                <ApiForm
-                  service="pexels"
-                  label="Pexels API"
-                  description="Utilizado para buscar imagens e vídeos de alta qualidade para os seus vídeos."
-                  docsUrl="https://www.pexels.com/api/"
-                  existingSettings={apiSettings?.find(s => s.service === "pexels")}
-                />
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium mb-2">APIs de Imagem</h3>
+                  <div className="p-4 bg-blue-50 rounded-md mb-4">
+                    <p className="text-sm text-blue-700">
+                      Configure pelo menos uma API de imagens para buscar recursos visuais para seus vídeos.
+                    </p>
+                  </div>
+                  
+                  <ApiForm
+                    service="pexels"
+                    label="Pexels API"
+                    description="Utilizado para buscar imagens e vídeos de alta qualidade para os seus vídeos."
+                    docsUrl="https://www.pexels.com/api/"
+                    existingSettings={apiSettings?.find(s => s.service === "pexels")}
+                  />
+                </div>
                 
-                <ApiForm
-                  service="google_tts"
-                  label="Google Text-to-Speech"
-                  description="Geração de áudio de alta qualidade em português com várias vozes para os vídeos."
-                  docsUrl="https://cloud.google.com/text-to-speech"
-                  existingSettings={apiSettings?.find(s => s.service === "google_tts")}
-                />
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium mb-2">APIs de Voz</h3>
+                  <div className="p-4 bg-blue-50 rounded-md mb-4">
+                    <p className="text-sm text-blue-700">
+                      Configure pelo menos uma API de conversão de texto para voz para gerar narrações em português brasileiro.
+                    </p>
+                  </div>
+                  
+                  <ApiForm
+                    service="google_tts"
+                    label="Google Text-to-Speech"
+                    description="Geração de áudio de alta qualidade em português com várias vozes para os vídeos."
+                    docsUrl="https://cloud.google.com/text-to-speech"
+                    existingSettings={apiSettings?.find(s => s.service === "google_tts")}
+                  />
+                  
+                  <ApiForm
+                    service="tts_service"
+                    label="TTS Service (Alternativo)"
+                    description="Serviço alternativo para geração de voz quando o Google TTS não estiver disponível."
+                    docsUrl="https://github.com/coqui-ai/TTS"
+                    existingSettings={apiSettings?.find(s => s.service === "tts_service")}
+                  />
+                </div>
                 
-                <ApiForm
-                  service="openai"
-                  label="OpenAI GPT-4"
-                  description="Utilizado para gerar conteúdo de texto para os vídeos (títulos, descrições, hashtags)."
-                  docsUrl="https://openai.com/api/"
-                  existingSettings={apiSettings?.find(s => s.service === "openai")}
-                />
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium mb-2">APIs de Inteligência Artificial</h3>
+                  <div className="p-4 bg-blue-50 rounded-md mb-4">
+                    <p className="text-sm text-blue-700">
+                      Configure pelo menos uma das APIs de IA para geração automática de conteúdo. O sistema utilizará automaticamente as alternativas quando a API principal estiver indisponível.
+                    </p>
+                  </div>
+                  
+                  <ApiForm
+                    service="openai"
+                    label="OpenAI GPT-4"
+                    description="Utilizado para gerar conteúdo de texto para os vídeos (títulos, descrições, hashtags)."
+                    docsUrl="https://openai.com/api/"
+                    existingSettings={apiSettings?.find(s => s.service === "openai")}
+                  />
+                  
+                  <ApiForm
+                    service="mistral"
+                    label="Mistral AI"
+                    description="API alternativa para geração de conteúdo, utilizada quando a OpenAI não está disponível."
+                    docsUrl="https://mistral.ai/"
+                    existingSettings={apiSettings?.find(s => s.service === "mistral")}
+                  />
+                  
+                  <ApiForm
+                    service="huggingface"
+                    label="HuggingFace"
+                    description="Utilizado para processamento de modelos de linguagem e geração de conteúdo."
+                    docsUrl="https://huggingface.co/docs/api-inference/quicktour"
+                    existingSettings={apiSettings?.find(s => s.service === "huggingface")}
+                  />
+                </div>
                 
                 <div className="space-y-4">
                   <div>

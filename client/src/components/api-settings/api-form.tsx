@@ -25,7 +25,7 @@ const apiSchema = z.object({
 type ApiFormValues = z.infer<typeof apiSchema>;
 
 interface ApiFormProps {
-  service: "pexels" | "google_tts" | "openai" | "ffmpeg";
+  service: "pexels" | "google_tts" | "openai" | "ffmpeg" | "mistral" | "huggingface" | "tts_service";
   label: string;
   description: string;
   docsUrl: string;
