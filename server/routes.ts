@@ -2658,6 +2658,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar versão do FFmpeg
       const version = await ffmpegService.getVersion();
       
+      // Verificar informações adicionais de codecs
+      const { spawn } = require('child_process');
+      
+      // Função para executar comando e obter saída
+      const execCommand = (command: string, args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const process = spawn(command, args);
+          let output = '';
+          
+          process.stdout.on('data', (data: Buffer) => {
+            output += data.toString();
+          });
+          
+          process.stderr.on('data', (data: Buffer) => {
+            output += data.toString();
+          });
+          
+          process.on('close', (code: number) => {
+            if (code !== 0) {
+              reject(new Error(`Comando falhou com código de saída ${code}`));
+            } else {
+              resolve(output);
+            }
+          });
+          
+          process.on('error', (err: Error) => {
+            reject(err);
+          });
+        });
+      };
+      
+      // Verificar codecs
+      const codecsOutput = await execCommand('ffmpeg', ['-codecs']);
+      
+      // Verificar formatos
+      const formatsOutput = await execCommand('ffmpeg', ['-formats']);
+      
+      // Analisar as informações para detalhes
+      const hasH264 = codecsOutput.includes('h264');
+      const hasAAC = codecsOutput.includes('aac');
+      const hasPNG = codecsOutput.includes('png');
+      const hasMP4 = formatsOutput.includes('mp4');
+      
+      // Criar detalhes técnicos
+      const details = {
+        codecs: {
+          hasH264,
+          hasAAC,
+          hasPNG,
+          total: (codecsOutput.match(/--/g) || []).length
+        },
+        formats: {
+          hasMP4,
+          total: (formatsOutput.match(/--/g) || []).length
+        }
+      };
+      
       // Criar diretório de teste se não existir
       const testDir = './uploads/test';
       if (!fs.existsSync(testDir)) {
@@ -2694,12 +2751,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         height: 480
       });
       
+      // Obter metadados do vídeo
+      const metadata = await ffmpegService.getVideoMetadata(outputPath);
+      
       res.status(200).json({
         success: true,
         message: "Teste de FFmpeg executado com sucesso",
         version,
-        videoPath: outputPath,
-        videoUrl: `/uploads/videos/${path.basename(outputPath)}`
+        details,
+        metadata,
+        url: `/uploads/videos/${path.basename(outputPath)}`,
+        fileName: path.basename(outputPath),
+        filePath: outputPath
       });
     } catch (error) {
       console.error("Erro no teste do FFmpeg:", error);
@@ -2774,6 +2837,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.mkdirSync(imagesDir, { recursive: true });
       }
       
+      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      
       // Verificar se há pelo menos uma imagem no diretório
       const imagesFiles = fs.readdirSync(imagesDir);
       
@@ -2811,8 +2876,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // 2. Criar o vídeo a partir das imagens
       console.log(`Criando vídeo a partir de ${imagePaths.length} imagens`);
-      
-      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
       
       const outputFileName = `complete_test_video_${Date.now()}.mp4`;
       const outputPath = await ffmpegService.createVideoFromImages({
