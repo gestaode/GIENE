@@ -28,12 +28,21 @@ interface GeneratedScript {
   mainPoints: string[];
   conclusion: string;
   fullScript: string;
+  videoLengthSeconds?: number;
+  _fallback?: boolean;
+  _emergencyFallback?: boolean;
 }
 
 interface GeneratedContent {
   title?: string;
   description?: string;
   hashtags?: string[];
+  instagram?: string;
+  facebook?: string;
+  twitter?: string;
+  tiktok?: string;
+  _fallback?: boolean;
+  _emergencyFallback?: boolean;
 }
 
 /**

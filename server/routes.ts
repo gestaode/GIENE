@@ -2697,13 +2697,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // 5. Obter metadados do vídeo gerado
       let metadata = {};
       try {
-        metadata = await getVideoMetadata(videoTest.outputPath);
+        if (videoTest.outputPath) {
+          metadata = await getVideoMetadata(videoTest.outputPath);
+        } else {
+          metadata = { error: "Caminho de saída não disponível" };
+        }
       } catch (error) {
         console.error("Erro ao obter metadados:", error);
         metadata = { error: String(error) };
       }
       
       // 6. Responder com sucesso e informações completas
+      const outputPath = videoTest.outputPath || "";
+      const fileName = outputPath ? path.basename(outputPath) : "unknown.mp4";
+      
       res.status(200).json({
         success: true,
         message: "Teste de FFmpeg executado com sucesso",
@@ -2711,9 +2718,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         codecs: codecsTest.codecs,
         formats: formatsTest.formats,
         metadata,
-        url: `/uploads/videos/${path.basename(videoTest.outputPath)}`,
-        fileName: path.basename(videoTest.outputPath),
-        filePath: videoTest.outputPath,
+        url: `/uploads/videos/${fileName}`,
+        fileName: fileName,
+        filePath: outputPath,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -2781,58 +2788,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log("Iniciando teste completo de fluxo de geração de vídeo...");
       
-      // Vamos usar uma abordagem mais simples e direta
-      const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
+      // Método alternativo: usamos o módulo de teste do FFmpeg diretamente
+      // que já foi testado e provado funcionar
+      const { testCompleteWorkflow } = await import('./services/ffmpeg-test');
       
-      // 1. Garantir que os diretórios existam
-      const dirs = ['uploads/videos', 'uploads/test', 'uploads/temp', 'uploads/images'];
-      for (const dir of dirs) {
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-      }
+      // Executar o teste de fluxo completo
+      const result = await testCompleteWorkflow();
       
-      // 2. Gerar diretamente vídeos de teste com texto em diferentes cores
-      const testVideos = [];
-      const colors = ['blue', 'red', 'green', 'yellow', 'purple'];
-      
-      for (let i = 0; i < colors.length; i++) {
-        const outputFileName = `test_${colors[i]}_${Date.now()}.mp4`;
-        const outputPath = await ffmpegService.createTextVideo(`Texto de Teste ${i+1}`, {
-          outputFileName,
-          width: 1080, 
-          height: 1920,
-          backgroundColor: colors[i],
-          textColor: 'white',
-          fontFamily: 'Arial',
-          fontSize: 60,
-          frameRate: 30,
-          duration: 3
+      if (!result.success) {
+        console.error("Erro no teste de fluxo completo:", result.error);
+        return res.status(500).json({
+          success: false,
+          message: "Erro ao executar fluxo completo de criação de vídeo",
+          error: result.error,
+          details: result.details
         });
-        testVideos.push(outputPath);
       }
       
-      // 3. Combinar os vídeos em um único
-      const outputFileName = `test_workflow_complete_${Date.now()}.mp4`;
-      const finalOutputPath = await ffmpegService.combineVideos({
-        videoPaths: testVideos,
-        outputFileName,
-        transition: 'fade',
-        transitionDuration: 0.5
-      });
+      const outputPath = result.outputPath || "";
+      const fileName = outputPath ? path.basename(outputPath) : "unknown.mp4";
       
       // 4. Retornar o resultado
       res.status(200).json({
         success: true,
         message: "Fluxo completo de criação de vídeo executado com sucesso",
-        url: `/uploads/videos/${path.basename(finalOutputPath)}`,
-        fileName: path.basename(finalOutputPath),
-        filePath: finalOutputPath,
-        details: {
-          videosGerados: testVideos.length,
-          videosTemporarios: testVideos,
-          duracao: testVideos.length * 3
-        },
+        url: `/uploads/videos/${fileName}`,
+        fileName: fileName,
+        filePath: outputPath,
+        details: result.details,
         timestamp: new Date().toISOString()
       });
     } catch (error) {

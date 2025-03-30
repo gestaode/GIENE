@@ -190,30 +190,49 @@ export async function testCompleteWorkflow(): Promise<{
     const inputFile = path.join('./uploads/temp', `input_${Date.now()}.txt`);
     let fileContent = '';
     
+    // Usar caminhos absolutos para evitar problemas com caminhos relativos
+    const absoluteImagePaths = imagePaths.map(imgPath => path.resolve(imgPath));
+    
     // Para cada imagem, adicionar entrada no arquivo
-    for (const imgPath of imagePaths) {
-      fileContent += `file '${imgPath}'\n`;
+    for (const imgPath of absoluteImagePaths) {
+      fileContent += `file '${imgPath.replace(/\\/g, '/')}'\n`;
       fileContent += `duration 3\n`; // Cada imagem dura 3 segundos
     }
     
     // Adicionar a última imagem novamente para o último segmento
-    fileContent += `file '${imagePaths[imagePaths.length - 1]}'\n`;
+    fileContent += `file '${absoluteImagePaths[absoluteImagePaths.length - 1].replace(/\\/g, '/')}'\n`;
     
     fs.writeFileSync(inputFile, fileContent);
     
-    // Criar vídeo
-    await execFilePromise('ffmpeg', [
-      '-f', 'concat',
-      '-safe', '0',
-      '-i', inputFile,
-      '-vsync', 'vfr',
+    console.log(`Arquivo de entrada criado em ${inputFile} com conteúdo:\n${fileContent}`);
+    
+    // Abordagem alternativa usando entradas diretas de imagens em vez de concat
+    // Criar vídeo diretamente das imagens em sequência sem usar concat
+    const ffmpegArgs = [];
+    
+    // Adicionar cada imagem como entrada
+    for (const imgPath of imagePaths) {
+      ffmpegArgs.push('-loop', '1', '-t', '3', '-i', imgPath);
+    }
+    
+    // Configurar filtro de concatenação
+    const filterComplex = absoluteImagePaths.map((_, i) => `[${i}:v]`).join('') + 
+                        `concat=n=${absoluteImagePaths.length}:v=1:a=0[outv]`;
+    
+    ffmpegArgs.push(
+      '-filter_complex', filterComplex,
+      '-map', '[outv]',
       '-pix_fmt', 'yuv420p',
       '-c:v', 'libx264',
       '-preset', 'medium',
       '-crf', '23',
       '-y',
       videoPath
-    ]);
+    );
+    
+    console.log(`Executando FFmpeg com argumentos: ${ffmpegArgs.join(' ')}`);
+    
+    await execFilePromise('ffmpeg', ffmpegArgs);
     
     // Limpar arquivo temporário
     if (fs.existsSync(inputFile)) {
