@@ -57,6 +57,33 @@ class SystemRunner:
                 self.successful_runs = 0
                 print(f"Reset counter. Consecutive failures: {self.consecutive_failures}")
 
+def realizar_varredura(repeticoes=1000):
+    execucoes_sucesso = 0
+    execucoes_falha = 0
+    tentativas = 0
+
+    while execucoes_sucesso < repeticoes:
+        print(f"Execução {tentativas+1}/{repeticoes}")
+        tentativas += 1
+
+        if rodar_sistema():
+            execucoes_sucesso += 1
+        else:
+            execucoes_falha += 1
+            execucoes_sucesso = 0  # Reinicia a contagem
+
+        # Se houver mais de 100 falhas consecutivas, interrompe o processo
+        if execucoes_falha > 100:
+            print("Muitas falhas consecutivas. Ajuste o código e tente novamente.")
+            break
+
+        time.sleep(1)  # Evita sobrecarga
+
+    if execucoes_sucesso == repeticoes:
+        print(f"Parabéns! O sistema rodou {repeticoes} vezes sem erros!")
+    else:
+        print(f"Interrompido após {tentativas} tentativas. Falhas: {execucoes_falha}")
+
 if __name__ == "__main__":
     runner = SystemRunner()
-    runner.run()
+    realizar_varredura()
