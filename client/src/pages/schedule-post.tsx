@@ -1,560 +1,355 @@
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
+import React, { useState } from "react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { CalendarIcon, Instagram, Clock } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
-import { pt } from "date-fns/locale";
-import { 
-  Calendar as CalendarIcon, 
-  Clock, 
-  Loader2, 
-  ChevronRight, 
-  Instagram, 
-  TrendingUp,
-  Hash,
-  PlusCircle,
-  Save,
-  Trash2,
-  Check,
-  Share2
-} from "lucide-react";
+import { ptBR } from "date-fns/locale";
 
-interface SchedulePostProps {
-  id: string;
-}
-
-export default function SchedulePost({ id }: SchedulePostProps) {
+export default function SchedulePost() {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
-  const [isScheduling, setIsScheduling] = useState(false);
-  const [isTrendSheetOpen, setIsTrendSheetOpen] = useState(false);
-  const [date, setDate] = useState<Date | undefined>(new Date());
-  const [time, setTime] = useState("12:00");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [hashtags, setHashtags] = useState<string[]>([]);
-  const [newHashtag, setNewHashtag] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["instagram", "tiktok"]);
+  const [location, setLocation] = useLocation();
   
-  // Buscar dados do vídeo
-  const { data: video, isLoading, error } = useQuery({
-    queryKey: ['/api/videos', id],
-    queryFn: async () => {
-      const response = await fetch(`/api/videos/${id}`);
-      if (!response.ok) {
-        throw new Error('Erro ao carregar o vídeo');
-      }
-      return response.json();
+  const [scheduleData, setScheduleData] = useState({
+    videoTitle: "Meu Vídeo",
+    description: "Descrição para redes sociais",
+    hashtags: "#financas #investimentos #dinheiro",
+    date: new Date(),
+    time: "12:00",
+    platforms: {
+      instagram: true,
+      tiktok: true,
+      facebook: false,
+      youtube: false,
     }
   });
 
-  // Busca de hashtags populares
-  const { data: trendingHashtags, isLoading: isLoadingTrends } = useQuery({
-    queryKey: ['/api/tiktok-trends/hashtags'],
-    queryFn: async () => {
-      const response = await fetch('/api/tiktok-trends/hashtags?limit=20');
-      if (!response.ok) {
-        throw new Error('Erro ao carregar tendências');
+  const [processing, setProcessing] = useState(false);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setScheduleData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleDateChange = (date: Date | undefined) => {
+    if (date) {
+      setScheduleData(prev => ({ ...prev, date }));
+    }
+  };
+
+  const handleTimeChange = (value: string) => {
+    setScheduleData(prev => ({ ...prev, time: value }));
+  };
+
+  const handlePlatformChange = (platform: keyof typeof scheduleData.platforms) => {
+    setScheduleData(prev => ({
+      ...prev,
+      platforms: {
+        ...prev.platforms,
+        [platform]: !prev.platforms[platform]
       }
-      return response.json();
-    }
-  });
+    }));
+  };
 
-  useEffect(() => {
-    if (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar o vídeo",
-        description: "Não foi possível carregar os dados do vídeo. Tente novamente."
-      });
-    }
-  }, [error, toast]);
-
-  useEffect(() => {
-    if (video) {
-      setTitle(video.title || "");
-      setDescription(video.description || "");
-      
-      if (video.tags && Array.isArray(video.tags)) {
-        setHashtags(video.tags.map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`));
-      }
-    }
-  }, [video]);
-
-  const handleAddHashtag = () => {
-    if (!newHashtag.trim()) return;
+  const handleSchedulePost = () => {
+    // Verificar se pelo menos uma plataforma está selecionada
+    const hasSelectedPlatform = Object.values(scheduleData.platforms).some(value => value);
     
-    const tag = newHashtag.trim().startsWith('#') 
-      ? newHashtag.trim() 
-      : `#${newHashtag.trim()}`;
-      
-    if (!hashtags.includes(tag)) {
-      setHashtags([...hashtags, tag]);
-    }
-    
-    setNewHashtag("");
-  };
-
-  const handleRemoveHashtag = (tag: string) => {
-    setHashtags(hashtags.filter(t => t !== tag));
-  };
-
-  const handleAddTrendingHashtag = (tag: string) => {
-    const formattedTag = tag.startsWith('#') ? tag : `#${tag}`;
-    if (!hashtags.includes(formattedTag)) {
-      setHashtags([...hashtags, formattedTag]);
-    }
-  };
-
-  const togglePlatform = (platform: string) => {
-    if (selectedPlatforms.includes(platform)) {
-      setSelectedPlatforms(selectedPlatforms.filter(p => p !== platform));
-    } else {
-      setSelectedPlatforms([...selectedPlatforms, platform]);
-    }
-  };
-
-  const handleSchedulePost = async () => {
-    if (!title) {
+    if (!hasSelectedPlatform) {
       toast({
+        title: "Erro ao agendar",
+        description: "Selecione pelo menos uma plataforma para publicação.",
         variant: "destructive",
-        title: "Título obrigatório",
-        description: "Por favor, adicione um título para a sua publicação."
       });
       return;
     }
-
-    if (!date) {
-      toast({
-        variant: "destructive",
-        title: "Data obrigatória",
-        description: "Por favor, selecione uma data para o agendamento."
-      });
-      return;
-    }
-
-    if (selectedPlatforms.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Plataforma obrigatória",
-        description: "Selecione pelo menos uma plataforma para publicação."
-      });
-      return;
-    }
-
-    // Combinar data e hora
-    const [hours, minutes] = time.split(':').map(Number);
-    const scheduledTime = new Date(date);
-    scheduledTime.setHours(hours, minutes);
-
-    setIsScheduling(true);
     
-    try {
-      // Aqui faria a chamada real para API
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    setProcessing(true);
+    
+    // Simulação de API call
+    setTimeout(() => {
+      setProcessing(false);
       
       toast({
-        title: "Agendamento realizado",
-        description: `Seu vídeo foi agendado para ${format(scheduledTime, "PPP 'às' HH:mm", { locale: pt })}`,
+        title: "Publicação agendada",
+        description: "Seu vídeo foi agendado com sucesso!",
       });
       
-      // Redirecionar para a página de agendamentos
-      setLocation('/schedule');
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Erro no agendamento",
-        description: "Não foi possível agendar a publicação. Tente novamente."
-      });
-    } finally {
-      setIsScheduling(false);
-    }
+      // Redirecionar para o dashboard
+      setLocation("/");
+    }, 1500);
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <span className="ml-2 text-lg">Carregando vídeo...</span>
-      </div>
-    );
-  }
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Agendamento de Publicação</h1>
-          <p className="text-muted-foreground">Configure os detalhes e agende o seu vídeo para as redes sociais</p>
+    <>
+      <PageHeader />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Agendar Publicação</h1>
+          <p className="text-gray-600">Programe seu vídeo para ser publicado nas redes sociais</p>
         </div>
-        <div className="flex space-x-3">
-          <Button variant="outline" onClick={() => setLocation(`/edit-video/${id}`)}>
-            Voltar para edição
-          </Button>
-          <Button 
-            onClick={handleSchedulePost}
-            disabled={isScheduling}
-          >
-            {isScheduling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Agendar Publicação <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Conteúdo principal */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Prévia do vídeo */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Prévia do Vídeo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="aspect-video bg-black flex items-center justify-center mb-4">
-                {video?.videoUrl ? (
-                  <video 
-                    src={video.videoUrl} 
-                    controls 
-                    className="max-h-full max-w-full"
-                  />
-                ) : (
-                  <div className="text-white text-center">
-                    <svg 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      className="h-16 w-16 mx-auto mb-4 opacity-40"
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    <p>Prévia de vídeo não disponível</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Detalhes da publicação */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Detalhes da Publicação</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="postTitle">Título da publicação</Label>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Detalhes da publicação</CardTitle>
+                <CardDescription>Configure como seu vídeo aparecerá nas redes sociais</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Título do vídeo</label>
                   <Input 
-                    id="postTitle" 
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    placeholder="Adicione um título para sua publicação"
+                    name="videoTitle"
+                    value={scheduleData.videoTitle}
+                    onChange={handleInputChange}
+                    placeholder="Digite o título do vídeo"
                   />
                 </div>
                 
-                <div>
-                  <Label htmlFor="postDescription">Descrição</Label>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Descrição para redes sociais</label>
                   <Textarea 
-                    id="postDescription"
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    placeholder="Adicione uma descrição atraente para seu vídeo"
-                    className="min-h-[120px]"
+                    name="description"
+                    value={scheduleData.description}
+                    onChange={handleInputChange}
+                    placeholder="Digite uma descrição atraente para seu vídeo"
+                    rows={4}
                   />
                 </div>
                 
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <Label htmlFor="hashtags">Hashtags</Label>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setIsTrendSheetOpen(true)}
-                    >
-                      <TrendingUp className="h-4 w-4 mr-1" /> 
-                      Ver tendências
-                    </Button>
-                  </div>
-                  
-                  <div className="flex mb-2">
-                    <div className="flex-1 mr-2">
-                      <Input 
-                        id="hashtags" 
-                        value={newHashtag}
-                        onChange={e => setNewHashtag(e.target.value)}
-                        placeholder="Adicione hashtags"
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddHashtag();
-                          }
-                        }}
-                      />
-                    </div>
-                    <Button onClick={handleAddHashtag}>
-                      <PlusCircle className="h-4 w-4 mr-1" /> Adicionar
-                    </Button>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {hashtags.map(tag => (
-                      <Badge key={tag} variant="secondary" className="flex items-center gap-1 px-3 py-1">
-                        <Hash className="h-3 w-3" /> {tag.replace('#', '')}
-                        <button 
-                          onClick={() => handleRemoveHashtag(tag)}
-                          className="ml-1 rounded-full hover:bg-red-100 p-0.5"
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Hashtags</label>
+                  <Input 
+                    name="hashtags"
+                    value={scheduleData.hashtags}
+                    onChange={handleInputChange}
+                    placeholder="#financas #investimentos #dinheiro"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Data de publicação</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start text-left font-normal"
                         >
-                          <Trash2 className="h-3 w-3 text-red-500" />
-                        </button>
-                      </Badge>
-                    ))}
-                    {hashtags.length === 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        Nenhuma hashtag adicionada ainda
-                      </p>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {scheduleData.date ? (
+                            format(scheduleData.date, "PPP", { locale: ptBR })
+                          ) : (
+                            <span>Selecione uma data</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={scheduleData.date}
+                          onSelect={handleDateChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Horário</label>
+                    <Select value={scheduleData.time} onValueChange={handleTimeChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione um horário" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 24 }).map((_, hour) => (
+                          <React.Fragment key={hour}>
+                            <SelectItem value={`${hour.toString().padStart(2, '0')}:00`}>
+                              {hour.toString().padStart(2, '0')}:00
+                            </SelectItem>
+                            <SelectItem value={`${hour.toString().padStart(2, '0')}:30`}>
+                              {hour.toString().padStart(2, '0')}:30
+                            </SelectItem>
+                          </React.Fragment>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium mb-3">Plataformas</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="instagram" 
+                        checked={scheduleData.platforms.instagram}
+                        onCheckedChange={() => handlePlatformChange("instagram")}
+                      />
+                      <label
+                        htmlFor="instagram"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                      >
+                        <span className="mr-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded p-1">
+                          <Instagram size={14} className="text-white" />
+                        </span>
+                        Instagram
+                      </label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="tiktok" 
+                        checked={scheduleData.platforms.tiktok}
+                        onCheckedChange={() => handlePlatformChange("tiktok")}
+                      />
+                      <label
+                        htmlFor="tiktok"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                      >
+                        <span className="mr-2 bg-black rounded p-1">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M19.589 6.686C19.589 6.686 19.589 6.686 19.589 6.686c-0.838-0.755-1.496-1.688-1.915-2.723c-0.411-1.015-0.619-2.101-0.619-3.205h-3.923v14.415c0 1.192-0.969 2.161-2.161 2.161c-1.192 0-2.161-0.969-2.161-2.161c0-1.192 0.969-2.161 2.161-2.161c0.247 0 0.484 0.042 0.705 0.119v-3.973c-0.237-0.032-0.477-0.048-0.72-0.048c-3.015 0-5.463 2.448-5.463 5.463s2.448 5.463 5.463 5.463c3.015 0 5.463-2.448 5.463-5.463c0-0.075-0.002-0.149-0.005-0.224l-0.004-7.749c1.548 1.057 3.393 1.756 5.379 1.956v-3.924C21.056 7.072 20.354 6.927 19.589 6.686z" fill="white"/>
+                          </svg>
+                        </span>
+                        TikTok
+                      </label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="facebook" 
+                        checked={scheduleData.platforms.facebook}
+                        onCheckedChange={() => handlePlatformChange("facebook")}
+                      />
+                      <label
+                        htmlFor="facebook"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                      >
+                        <span className="mr-2 bg-blue-600 rounded p-1">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" fill="white"/>
+                          </svg>
+                        </span>
+                        Facebook
+                      </label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="youtube" 
+                        checked={scheduleData.platforms.youtube}
+                        onCheckedChange={() => handlePlatformChange("youtube")}
+                      />
+                      <label
+                        htmlFor="youtube"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                      >
+                        <span className="mr-2 bg-red-600 rounded p-1">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white"/>
+                          </svg>
+                        </span>
+                        YouTube
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter className="flex justify-between">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setLocation("/edit-video")}
+                >
+                  Voltar
+                </Button>
+                <Button 
+                  onClick={handleSchedulePost}
+                  disabled={processing}
+                >
+                  {processing ? "Processando..." : "Agendar publicação"}
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
+          
+          <div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Resumo da publicação</CardTitle>
+                <CardDescription>Revisão do agendamento</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <h4 className="font-medium mb-2">Detalhes</h4>
+                  <p className="text-sm text-gray-600 mb-1"><strong>Título:</strong> {scheduleData.videoTitle}</p>
+                  <p className="text-sm text-gray-600 mb-1"><strong>Hashtags:</strong> {scheduleData.hashtags}</p>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <h4 className="font-medium mb-2">Agendamento</h4>
+                  <div className="flex items-center text-sm text-gray-600 mb-1">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    <span>
+                      {format(scheduleData.date, "PPP", { locale: ptBR })}
+                    </span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Clock className="mr-2 h-4 w-4" />
+                    <span>{scheduleData.time}</span>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <h4 className="font-medium mb-2">Plataformas</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {scheduleData.platforms.instagram && (
+                      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-1 rounded text-xs flex items-center">
+                        <Instagram size={12} className="mr-1" />
+                        Instagram
+                      </div>
+                    )}
+                    {scheduleData.platforms.tiktok && (
+                      <div className="bg-black text-white px-2 py-1 rounded text-xs flex items-center">
+                        <svg width="12" height="12" className="mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M19.589 6.686C19.589 6.686 19.589 6.686 19.589 6.686c-0.838-0.755-1.496-1.688-1.915-2.723c-0.411-1.015-0.619-2.101-0.619-3.205h-3.923v14.415c0 1.192-0.969 2.161-2.161 2.161c-1.192 0-2.161-0.969-2.161-2.161c0-1.192 0.969-2.161 2.161-2.161c0.247 0 0.484 0.042 0.705 0.119v-3.973c-0.237-0.032-0.477-0.048-0.72-0.048c-3.015 0-5.463 2.448-5.463 5.463s2.448 5.463 5.463 5.463c3.015 0 5.463-2.448 5.463-5.463c0-0.075-0.002-0.149-0.005-0.224l-0.004-7.749c1.548 1.057 3.393 1.756 5.379 1.956v-3.924C21.056 7.072 20.354 6.927 19.589 6.686z" fill="white"/>
+                        </svg>
+                        TikTok
+                      </div>
+                    )}
+                    {scheduleData.platforms.facebook && (
+                      <div className="bg-blue-600 text-white px-2 py-1 rounded text-xs flex items-center">
+                        <svg width="12" height="12" className="mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" fill="white"/>
+                        </svg>
+                        Facebook
+                      </div>
+                    )}
+                    {scheduleData.platforms.youtube && (
+                      <div className="bg-red-600 text-white px-2 py-1 rounded text-xs flex items-center">
+                        <svg width="12" height="12" className="mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white"/>
+                        </svg>
+                        YouTube
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Painel lateral */}
-        <div className="space-y-6">
-          {/* Agendamento */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Agendamento</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label>Data de publicação</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal mt-1"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {date ? format(date, "PPP", { locale: pt }) : "Selecione uma data"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={date}
-                        onSelect={setDate}
-                        initialFocus
-                        locale={pt}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                
-                <div>
-                  <Label htmlFor="time">Horário</Label>
-                  <div className="flex items-center mt-1">
-                    <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="time" 
-                      type="time" 
-                      value={time}
-                      onChange={e => setTime(e.target.value)}
-                    />
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                <div>
-                  <Label>Plataformas</Label>
-                  <div className="space-y-3 mt-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Instagram className="h-5 w-5 text-pink-500" />
-                        <span>Instagram</span>
-                      </div>
-                      <Switch 
-                        checked={selectedPlatforms.includes('instagram')}
-                        onCheckedChange={() => togglePlatform('instagram')}
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
-                        </svg>
-                        <span>TikTok</span>
-                      </div>
-                      <Switch 
-                        checked={selectedPlatforms.includes('tiktok')}
-                        onCheckedChange={() => togglePlatform('tiktok')}
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <svg className="h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                        </svg>
-                        <span>YouTube</span>
-                      </div>
-                      <Switch 
-                        checked={selectedPlatforms.includes('youtube')}
-                        onCheckedChange={() => togglePlatform('youtube')}
-                      />
-                    </div>
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                <div>
-                  <Label>Opções avançadas</Label>
-                  <div className="space-y-3 mt-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Share2 className="h-4 w-4" />
-                        <span className="text-sm">Compartilhar automaticamente</span>
-                      </div>
-                      <Switch defaultChecked={true} />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Save className="h-4 w-4" />
-                        <span className="text-sm">Salvar no histórico</span>
-                      </div>
-                      <Switch defaultChecked={true} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Resumo */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Resumo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Título:</span>
-                  <span className="font-medium">{title || "Não definido"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Plataformas:</span>
-                  <span className="font-medium">{selectedPlatforms.length} selecionadas</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Data:</span>
-                  <span className="font-medium">
-                    {date ? format(date, "dd/MM/yyyy", { locale: pt }) : "Não definida"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Horário:</span>
-                  <span className="font-medium">{time}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Hashtags:</span>
-                  <span className="font-medium">{hashtags.length}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-
-      {/* Sheet de tendências */}
-      <Sheet open={isTrendSheetOpen} onOpenChange={setIsTrendSheetOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Hashtags em Alta</SheetTitle>
-            <SheetDescription>
-              Clique em uma hashtag para adicioná-la ao seu post
-            </SheetDescription>
-          </SheetHeader>
-          
-          <div className="mt-6">
-            {isLoadingTrends ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {trendingHashtags?.topics?.map((trend: any) => (
-                  <div 
-                    key={trend.name} 
-                    className="flex justify-between items-center p-3 hover:bg-muted rounded-md cursor-pointer"
-                    onClick={() => {
-                      handleAddTrendingHashtag(trend.name);
-                      toast({
-                        title: "Hashtag adicionada",
-                        description: `#${trend.name} foi adicionada à sua lista`
-                      });
-                    }}
-                  >
-                    <div>
-                      <p className="font-medium flex items-center">
-                        <Hash className="h-4 w-4 mr-1" />
-                        {trend.name}
-                      </p>
-                      {trend.views && (
-                        <p className="text-sm text-muted-foreground">
-                          {trend.views.toLocaleString()} visualizações
-                        </p>
-                      )}
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      <PlusCircle className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                
-                {(!trendingHashtags?.topics || trendingHashtags.topics.length === 0) && (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">
-                      Nenhuma tendência encontrada no momento
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-    </div>
+    </>
   );
 }

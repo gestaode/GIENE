@@ -44,17 +44,17 @@ function Router() {
           </MainLayout>
         )}
       </Route>
-      <Route path="/edit-video/:id">
-        {({ id }) => (
+      <Route path="/edit-video">
+        {() => (
           <MainLayout>
-            <EditVideo id={id} />
+            <EditVideo />
           </MainLayout>
         )}
       </Route>
-      <Route path="/schedule-post/:id">
-        {({ id }) => (
+      <Route path="/schedule-post">
+        {() => (
           <MainLayout>
-            <SchedulePost id={id} />
+            <SchedulePost />
           </MainLayout>
         )}
       </Route>
