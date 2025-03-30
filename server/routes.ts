@@ -7,7 +7,7 @@ import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import fs from "fs";
+import * as fs from "fs";
 
 // Função auxiliar para padronizar respostas de erro
 function errorResponse(res: Response, status: number, message: string, error?: any) {
@@ -1046,7 +1046,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const imagePath = path.join(testDir, `test_image_${i + 1}.png`);
         
         // Criar imagem simples com canvas
-        const { createCanvas } = require('canvas');
+        // Importando canvas de forma compatível com ESM
+        const { createCanvas } = await import('canvas');
         const canvas = createCanvas(imageSize.width, imageSize.height);
         const ctx = canvas.getContext('2d');
         
@@ -2653,139 +2654,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rota para teste rápido do FFmpeg
   app.get("/api/video/test-ffmpeg", async (_req: Request, res: Response) => {
     try {
-      const ffmpegService = new FFmpegService();
+      // Importar o serviço de teste do FFmpeg
+      const { 
+        testFFmpegInstallation, 
+        getFFmpegCodecs,
+        getFFmpegFormats,
+        testFFmpegBasicVideo,
+        getVideoMetadata 
+      } = await import('./services/ffmpeg-test');
       
-      // Verificar versão do FFmpeg
-      const version = await ffmpegService.getVersion();
+      // 1. Verificar instalação do FFmpeg
+      const installationTest = await testFFmpegInstallation();
       
-      // Usando child_process diretamente em vez de require
-      const { spawn } = await import('child_process');
-      
-      // Função para executar comando e obter saída
-      const execCommand = (command: string, args: string[]): Promise<string> => {
-        return new Promise((resolve, reject) => {
-          const process = spawn(command, args);
-          let output = '';
-          
-          process.stdout.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-          
-          process.stderr.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-          
-          process.on('close', (code: number) => {
-            if (code !== 0) {
-              reject(new Error(`Comando falhou com código de saída ${code}`));
-            } else {
-              resolve(output);
-            }
-          });
-          
-          process.on('error', (err: Error) => {
-            reject(err);
-          });
+      if (!installationTest.installed) {
+        return res.status(500).json({
+          success: false,
+          message: "FFmpeg não está disponível no sistema",
+          error: installationTest.error
         });
-      };
+      }
       
-      // Obter informações dos codecs e formatos usando comando direto
-      let codecsOutput = '';
-      let formatsOutput = '';
+      // 2. Verificar codecs disponíveis
+      const codecsTest = await getFFmpegCodecs();
       
+      // 3. Verificar formatos suportados
+      const formatsTest = await getFFmpegFormats();
+      
+      // 4. Criar vídeo de teste
+      const videoTest = await testFFmpegBasicVideo();
+      
+      if (!videoTest.success) {
+        return res.status(500).json({
+          success: false,
+          message: "Erro ao gerar vídeo de teste",
+          error: videoTest.error,
+          installation: installationTest,
+          codecs: codecsTest,
+          formats: formatsTest
+        });
+      }
+      
+      // 5. Obter metadados do vídeo gerado
+      let metadata = {};
       try {
-        codecsOutput = await execCommand('ffmpeg', ['-codecs']);
-        formatsOutput = await execCommand('ffmpeg', ['-formats']);
-      } catch (cmdError) {
-        console.error("Erro ao executar comandos ffmpeg:", cmdError);
+        metadata = await getVideoMetadata(videoTest.outputPath);
+      } catch (error) {
+        console.error("Erro ao obter metadados:", error);
+        metadata = { error: String(error) };
       }
       
-      // Analisar as informações para detalhes
-      const hasH264 = codecsOutput.includes('h264');
-      const hasAAC = codecsOutput.includes('aac');
-      const hasPNG = codecsOutput.includes('png');
-      const hasMP4 = formatsOutput.includes('mp4');
-      
-      // Criar detalhes técnicos
-      const details = {
-        codecs: {
-          hasH264,
-          hasAAC,
-          hasPNG,
-          total: (codecsOutput.match(/--/g) || []).length
-        },
-        formats: {
-          hasMP4,
-          total: (formatsOutput.match(/--/g) || []).length
-        }
-      };
-      
-      // Criar diretório de teste se não existir
-      const testDir = './uploads/test';
-      if (!fs.existsSync(testDir)) {
-        fs.mkdirSync(testDir, { recursive: true });
-      }
-      
-      // Criar imagem de teste diretamente em vez de usar Canvas
-      // Vamos usar um método mais simples para gerar uma imagem de teste
-      const imagePath = path.join(testDir, 'test_ffmpeg.png');
-      
-      // Verificar se já existe uma imagem de teste para usar
-      const usarImagemExistente = fs.existsSync(imagePath);
-      
-      if (!usarImagemExistente) {
-        // Se não existe, criar uma imagem simples com texto usando o próprio ffmpeg
-        const textoCmd = [
-          '-f', 'lavfi', 
-          '-i', 'color=c=blue:s=640x480:d=1', 
-          '-vf', "drawtext=text='Teste FFmpeg':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2",
-          '-frames:v', '1', 
-          imagePath
-        ];
-        
-        try {
-          await execCommand('ffmpeg', textoCmd);
-        } catch (err) {
-          console.error("Erro ao criar imagem de teste:", err);
-          // Fallback: usar uma imagem que já exista no sistema
-          // Procurar por alguma imagem png no diretório uploads
-          const allFiles = fs.readdirSync('./uploads');
-          const pngFile = allFiles.find(f => f.endsWith('.png'));
-          
-          if (pngFile) {
-            fs.copyFileSync(path.join('./uploads', pngFile), imagePath);
-          } else {
-            // Se não houver nenhuma imagem, retornar erro
-            return res.status(500).json({
-              success: false,
-              message: "Não foi possível criar uma imagem de teste para o FFmpeg",
-            });
-          }
-        }
-      }
-      
-      // Criar vídeo simples a partir da imagem
-      const outputFileName = `test_ffmpeg_${Date.now()}.mp4`;
-      const outputPath = await ffmpegService.createVideoFromImages({
-        imagePaths: [imagePath],
-        outputFileName,
-        duration: 5,
-        width: 640,
-        height: 480
-      });
-      
-      // Obter metadados do vídeo
-      const metadata = await ffmpegService.getVideoMetadata(outputPath);
-      
+      // 6. Responder com sucesso e informações completas
       res.status(200).json({
         success: true,
         message: "Teste de FFmpeg executado com sucesso",
-        version,
-        details,
+        version: installationTest.version,
+        codecs: codecsTest.codecs,
+        formats: formatsTest.formats,
         metadata,
-        url: `/uploads/videos/${path.basename(outputPath)}`,
-        fileName: path.basename(outputPath),
-        filePath: outputPath
+        url: `/uploads/videos/${path.basename(videoTest.outputPath)}`,
+        fileName: path.basename(videoTest.outputPath),
+        filePath: videoTest.outputPath,
+        timestamp: new Date().toISOString()
       });
     } catch (error) {
       console.error("Erro no teste do FFmpeg:", error);
@@ -2850,82 +2779,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Endpoint para testar o fluxo completo de criação de vídeo
   app.post("/api/video/test-complete-workflow", async (req: Request, res: Response) => {
     try {
-      console.log("Iniciando teste de fluxo completo de criação de vídeo");
+      console.log("Iniciando teste completo de fluxo de geração de vídeo...");
       
-      // 1. Criação das imagens para o teste (assumimos que já existem)
-      const imagesDir = path.join(process.cwd(), 'uploads/images');
-      
-      // Verificar se o diretório de imagens existe
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
-      }
-      
+      // Vamos usar uma abordagem mais simples e direta
       const ffmpegService = initializeService(req, 'ffmpeg') as FFmpegService;
       
-      // Verificar se há pelo menos uma imagem no diretório
-      const imagesFiles = fs.readdirSync(imagesDir);
+      // 1. Garantir que os diretórios existam
+      const dirs = ['uploads/videos', 'uploads/test', 'uploads/temp', 'uploads/images'];
+      for (const dir of dirs) {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+      }
       
-      if (imagesFiles.length === 0) {
-        // Se não houver imagens, criar uma imagem de teste com texto
-        const testImagePath = path.join(imagesDir, 'test_image.png');
-        
-        // Criar imagem usando a função de texto para vídeo
-        await ffmpegService.createTextVideo("Imagem de Teste", {
-          outputFileName: testImagePath,
-          width: 1080,
+      // 2. Gerar diretamente vídeos de teste com texto em diferentes cores
+      const testVideos = [];
+      const colors = ['blue', 'red', 'green', 'yellow', 'purple'];
+      
+      for (let i = 0; i < colors.length; i++) {
+        const outputFileName = `test_${colors[i]}_${Date.now()}.mp4`;
+        const outputPath = await ffmpegService.createTextVideo(`Texto de Teste ${i+1}`, {
+          outputFileName,
+          width: 1080, 
           height: 1920,
-          backgroundColor: 'blue',
+          backgroundColor: colors[i],
           textColor: 'white',
-          duration: 1
+          fontFamily: 'Arial',
+          fontSize: 60,
+          frameRate: 30,
+          duration: 3
         });
-        
-        return res.status(200).json({
-          success: false,
-          message: "Não há imagens para criar o vídeo. Uma imagem de teste foi criada, tente novamente."
-        });
+        testVideos.push(outputPath);
       }
       
-      const imagePaths = imagesFiles
-        .filter(file => ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(file).toLowerCase()))
-        .map(file => path.join(imagesDir, file))
-        .slice(0, 5); // Limitar a 5 imagens para o teste
-      
-      if (imagePaths.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Não há imagens válidas para criar o vídeo."
-        });
-      }
-      
-      // 2. Criar o vídeo a partir das imagens
-      console.log(`Criando vídeo a partir de ${imagePaths.length} imagens`);
-      
-      const outputFileName = `complete_test_video_${Date.now()}.mp4`;
-      const outputPath = await ffmpegService.createVideoFromImages({
-        imagePaths,
+      // 3. Combinar os vídeos em um único
+      const outputFileName = `test_workflow_complete_${Date.now()}.mp4`;
+      const finalOutputPath = await ffmpegService.combineVideos({
+        videoPaths: testVideos,
         outputFileName,
-        duration: 3,
         transition: 'fade',
-        transitionDuration: 0.5,
-        width: 1080,
-        height: 1920,
-        textOverlay: "Vídeo de Teste Completo",
-        textPosition: "bottom",
-        textColor: "white",
-        fps: 30,
-        zoomEffect: true,
-        colorGrading: "vibrant",
-        outputQuality: "high"
+        transitionDuration: 0.5
       });
       
-      console.log(`Vídeo de teste completo criado: ${outputPath}`);
-      
+      // 4. Retornar o resultado
       res.status(200).json({
         success: true,
         message: "Fluxo completo de criação de vídeo executado com sucesso",
-        url: `/uploads/videos/${path.basename(outputPath)}`,
-        fileName: path.basename(outputPath),
-        filePath: outputPath
+        url: `/uploads/videos/${path.basename(finalOutputPath)}`,
+        fileName: path.basename(finalOutputPath),
+        filePath: finalOutputPath,
+        details: {
+          videosGerados: testVideos.length,
+          videosTemporarios: testVideos,
+          duracao: testVideos.length * 3
+        },
+        timestamp: new Date().toISOString()
       });
     } catch (error) {
       console.error("Erro no teste de fluxo completo:", error);
