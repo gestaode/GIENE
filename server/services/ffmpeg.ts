@@ -564,6 +564,22 @@ export class FFmpegService {
   /**
    * Obtém a versão do FFmpeg
    */
+  /**
+   * Verifica se o FFmpeg está disponível no sistema
+   */
+  async isAvailable(): Promise<boolean> {
+    try {
+      const version = await this.getVersion();
+      return version.includes('ffmpeg');
+    } catch (error) {
+      log(`FFmpeg não está disponível: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
+      return false;
+    }
+  }
+
+  /**
+   * Obtém a versão do FFmpeg instalado
+   */
   async getVersion(): Promise<string> {
     return new Promise((resolve, reject) => {
       execFile('ffmpeg', ['-version'], (error, stdout, stderr) => {
