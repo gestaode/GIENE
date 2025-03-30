@@ -54,12 +54,54 @@ router.post('/start', async (req, res) => {
       // Criar um único trabalho de exportação
       const job = await exportService.createExportJob(userId, type, format);
       
-      res.status(202).json({
-        success: true,
-        message: `Exportação de ${type} iniciada`,
-        jobId: job.id,
-        status: job.status
+      // Aguardar a conclusão do trabalho
+      await new Promise<void>((resolve) => {
+        const checkStatus = async () => {
+          const updatedJob = await storage.getExportJob(job.id);
+          if (updatedJob && (updatedJob.status === 'completed' || updatedJob.status === 'failed')) {
+            resolve();
+          } else {
+            setTimeout(checkStatus, 500); // verificar a cada 500ms
+          }
+        };
+        
+        // Iniciar verificação de status
+        setTimeout(checkStatus, 500);
       });
+      
+      // Obter trabalho atualizado
+      const updatedJob = await storage.getExportJob(job.id);
+      
+      if (updatedJob && updatedJob.status === 'completed' && updatedJob.filePath) {
+        // Definir nome adequado para download
+        const filename = path.basename(updatedJob.filePath);
+        const downloadName = `export_${updatedJob.type}_${updatedJob.id}${path.extname(updatedJob.filePath)}`;
+        
+        // Configurar headers para download
+        res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+        
+        if (updatedJob.format === 'json') {
+          res.setHeader('Content-Type', 'application/json');
+        } else if (updatedJob.format === 'csv') {
+          res.setHeader('Content-Type', 'text/csv');
+        } else {
+          res.setHeader('Content-Type', 'application/octet-stream');
+        }
+        
+        // Streaming do arquivo para o cliente
+        const fileStream = exportService.getExportFileStream(updatedJob.filePath);
+        fileStream.pipe(res);
+      } else {
+        // Se o trabalho falhou ou não tem arquivo, retornar resposta JSON
+        res.status(updatedJob?.status === 'failed' ? 500 : 202).json({
+          success: updatedJob?.status === 'completed',
+          message: `Exportação de ${type} ${updatedJob?.status}`,
+          jobId: job.id,
+          status: updatedJob?.status || job.status,
+          error: updatedJob?.error || null,
+          downloadUrl: updatedJob?.status === 'completed' ? `/api/export/download/${job.id}` : null
+        });
+      }
     }
   } catch (error) {
     log(`Erro ao iniciar exportação: ${error instanceof Error ? error.message : String(error)}`, 'export-api');
@@ -202,18 +244,28 @@ router.get('/app', async (req, res) => {
       zlib: { level: 9 }
     });
     
+    // Configurar event handlers antes de finalizar o arquivo
     output.on('close', () => {
-      // Enviar o arquivo para download
-      res.download(zipFilePath, 'videogenie_app_export.zip', (err) => {
-        if (err) {
-          log(`Erro ao enviar arquivo para download: ${err.message}`, 'export-api');
-        }
+      // Verificar se o arquivo foi criado com sucesso
+      if (fs.existsSync(zipFilePath)) {
+        const stats = fs.statSync(zipFilePath);
+        log(`Arquivo ZIP criado com sucesso: ${zipFilePath} (${stats.size} bytes)`, 'export-api');
         
-        // Limpar arquivo depois do download (opcional)
+        // Definir cabeçalhos de download adequados
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', 'attachment; filename="videogenie_app_export.zip"');
+        res.setHeader('Content-Length', stats.size);
+        
+        // Enviar o arquivo como stream
+        const fileStream = fs.createReadStream(zipFilePath);
+        fileStream.pipe(res);
+        
+        // Configurar limpeza após 5 minutos
         setTimeout(() => {
           try {
             if (fs.existsSync(zipFilePath)) {
               fs.unlinkSync(zipFilePath);
+              log(`Arquivo ZIP removido após download: ${zipFilePath}`, 'export-api');
             }
             if (fs.existsSync(exportDir)) {
               fs.rmdirSync(exportDir, { recursive: true });
@@ -222,7 +274,13 @@ router.get('/app', async (req, res) => {
             log(`Erro ao limpar arquivos temporários: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`, 'export-api');
           }
         }, 5 * 60 * 1000); // Limpar depois de 5 minutos
-      });
+      } else {
+        log(`Erro: arquivo ZIP não encontrado após criação: ${zipFilePath}`, 'export-api');
+        res.status(500).json({
+          success: false,
+          error: 'Erro ao criar arquivo de exportação'
+        });
+      }
     });
     
     archive.on('error', (err) => {
