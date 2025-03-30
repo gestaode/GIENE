@@ -1,841 +1,101 @@
-import { spawn } from "child_process";
-import { log } from "../vite";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
-import ffmpegStatic from "ffmpeg-static";
+import { execFile } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { log } from '../vite';
 
-// Garantir que temos o caminho do ffmpeg
-const ffmpegPath = ffmpegStatic;
-console.log("FFmpeg path:", ffmpegPath);
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Make sure output directories exist
-const OUTPUT_DIR = path.join(__dirname, "../../uploads/videos");
-const TEMP_DIR = path.join(__dirname, "../../uploads/temp");
-const IMAGES_DIR = path.join(__dirname, "../../uploads/images");
-
-// Cria todos os diretórios necessários
-const directories = [OUTPUT_DIR, TEMP_DIR, IMAGES_DIR];
-for (const dir of directories) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-    console.log(`Diretório criado: ${dir}`);
-  }
-}
-
-// Define permissões para garantir acesso total
-for (const dir of directories) {
-  try {
-    fs.chmodSync(dir, 0o777);
-    console.log(`Permissões definidas para ${dir}`);
-  } catch (error) {
-    console.error(`Erro ao definir permissões para ${dir}:`, error);
-  }
-}
-
-interface VideoOptions {
-  outputFileName: string;
-  width?: number;
-  height?: number;
-  frameRate?: number;
-  bitrate?: string;
-}
-
-interface AddAudioOptions {
-  videoPath: string;
-  audioPath: string;
-  outputFileName: string;
-  loop?: boolean;
-}
-
-interface ImageToVideoOptions {
-  imagePaths: string[];
-  outputFileName: string;
-  duration?: number;
-  transition?: 'fade' | 'wipe' | 'slide' | 'zoom' | 'radial' | 'crosszoom' | 'dissolve' | 'pixelize' | 'none'; // Opções expandidas de transição
-  transitionDuration?: number;
-  width?: number;
-  height?: number;
-  textOverlay?: string; // Texto para sobrepor às imagens
-  textPosition?: 'top' | 'center' | 'bottom'; // Posição do texto
-  textColor?: string; // Cor do texto
-  textFont?: string; // Fonte do texto
-  textAnimation?: 'none' | 'typewriter' | 'fadein' | 'slidein'; // Animação para o texto
-  logo?: string; // Caminho para logotipo a ser exibido
-  logoPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'; // Posição do logo
-  fps?: number; // Taxa de quadros por segundo
-  audioPath?: string; // Caminho para áudio a ser adicionado diretamente
-  zoomEffect?: boolean; // Aplicar efeito Ken Burns (zoom suave)
-  colorGrading?: 'vibrant' | 'moody' | 'warm' | 'cool' | 'cinematic' | 'vintage' | 'none'; // Mais opções de ajustes de cor
-  subtitleFile?: string; // Arquivo SRT para legendas
-  autoSubtitle?: boolean; // Gerar legendas automaticamente
-  watermark?: string; // Texto ou imagem para marca d'água
-  beatSync?: boolean; // Sincronizar transições com batidas da música
-  filterGraph?: string; // Filtergraph FFmpeg avançado personalizado (para usuários avançados)
-  customOverlays?: Array<{path: string, position: string, duration: number}>; // Elementos de sobreposição adicionais (emojis, stickers)
-  outputQuality?: 'draft' | 'standard' | 'high' | 'ultra'; // Presets de qualidade pré-configurados
-  social?: 'tiktok' | 'instagram' | 'youtube' | 'facebook'; // Otimizar para plataforma específica
-}
-
-interface CombineVideosOptions {
-  videoPaths: string[];
-  outputFileName: string;
-  transition?: string;
-  transitionDuration?: number;
-}
-
-interface VideoMetadata {
-  duration: number;
-  width: number;
-  height: number;
-  format: string;
-}
-
+/**
+ * Serviço para operações com FFmpeg
+ */
 export class FFmpegService {
-  /**
-   * Create video from a series of images com efeitos avançados para maior engajamento e conversão
-   * Versão otimizada para máximo engajamento em redes sociais
-   */
-  /**
-   * Verifica se um arquivo existe e se está acessível
-   */
-  private checkFileExists(filePath: string): boolean {
-    try {
-      return fs.existsSync(filePath);
-    } catch (error) {
-      console.error(`Erro ao verificar existência do arquivo ${filePath}:`, error);
-      return false;
-    }
-  }
-  
-  /**
-   * Verifica se um arquivo tem formato de imagem suportado pelo FFmpeg
-   */
-  private isSupportedImageFormat(filePath: string): boolean {
-    const supportedFormats = ['.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'];
-    const ext = path.extname(filePath).toLowerCase();
-    return supportedFormats.includes(ext);
+  constructor() {
+    this.ensureDirectoriesExist();
   }
 
-  async createVideoFromImages(options: ImageToVideoOptions): Promise<string> {
-    const {
-      imagePaths,
-      outputFileName,
-      duration = 3,
-      transition = "fade",
-      transitionDuration = 0.5,
-      width = 1080,
-      height = 1920,
-      textOverlay,
-      textPosition = 'bottom',
-      textColor = 'white',
-      textFont,
-      textAnimation = 'none',
-      logo,
-      logoPosition = 'top-right',
-      fps = 30,
-      zoomEffect = true,
-      colorGrading = 'vibrant',
-      audioPath,
-      subtitleFile,
-      autoSubtitle = false,
-      watermark,
-      beatSync = false,
-      filterGraph = '',
-      customOverlays = [],
-      outputQuality = 'high',
-      social = 'tiktok'
-    } = options;
-
-    if (imagePaths.length === 0) {
-      throw new Error("No image paths provided");
-    }
-
-    try {
-      const outputPath = path.join(OUTPUT_DIR, outputFileName);
-      const tempVideoPath = path.join(TEMP_DIR, `temp_${Date.now()}.mp4`);
-      
-      // Verificar existência das imagens e caminhos válidos
-      const validatedImagePaths = [];
-      
-      for (const imgPath of imagePaths) {
-        // Já recebemos caminhos absolutos da API, não precisamos recriar
-        // Só validamos se o arquivo existe e se é um formato suportado
-        
-        console.log(`Verificando imagem no FFmpegService: ${imgPath}`);
-        
-        if (!this.checkFileExists(imgPath)) {
-          console.warn(`Arquivo de imagem não encontrado: ${imgPath}`);
-          continue;
-        }
-        
-        // Verifica se é um formato de imagem suportado pelo FFmpeg
-        if (!this.isSupportedImageFormat(imgPath)) {
-          console.warn(`Formato de imagem não suportado: ${imgPath}`);
-          continue;
-        }
-        
-        console.log(`Imagem validada: ${imgPath}`);
-        validatedImagePaths.push(imgPath);
+  /**
+   * Garante que os diretórios necessários existam
+   */
+  private ensureDirectoriesExist() {
+    const dirs = ['./uploads', './uploads/temp'];
+    for (const dir of dirs) {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
-      
-      if (validatedImagePaths.length === 0) {
-        throw new Error("Nenhuma imagem válida fornecida. Todas as imagens foram rejeitadas.");
-      }
-      
-      console.log(`Usando ${validatedImagePaths.length} imagens válidas para criar o vídeo.`);
-      
-      // Gera arquivo de legendas se autoSubtitle estiver ativado e textOverlay for fornecido
-      let subtitlePath = "";
-      if (autoSubtitle && textOverlay) {
-        // Duração total do vídeo em segundos
-        const videoTotalDuration = validatedImagePaths.length * duration;
-        // Gera arquivo SRT de legendas
-        subtitlePath = await this.generateSubtitleFile(
-          textOverlay, 
-          videoTotalDuration, 
-          `subtitles_${Date.now()}.srt`
-        );
-      }
-      
-      // Create a temporary file for the list of images
-      const listFile = path.join(TEMP_DIR, `list_${Date.now()}.txt`);
-      
-      // Create the content for the list file with durations
-      let listContent = "";
-      console.log('Processing images for video creation:');
-      for (const imagePath of validatedImagePaths) {
-        // Escape single quotes in the path
-        const escapedPath = imagePath.replace(/'/g, "'\\''");
-        console.log(`- Using image: ${escapedPath}`);
-        listContent += `file '${escapedPath}'\nduration ${duration}\n`;
-      }
-      // Add the last image again (needed for the end)
-      if (validatedImagePaths.length > 0) {
-        const lastImagePath = validatedImagePaths[validatedImagePaths.length - 1].replace(/'/g, "'\\''");
-        listContent += `file '${lastImagePath}'`;
-      }
-      
-      // Write the list file
-      fs.writeFileSync(listFile, listContent);
-      
-      // Construir filtros de vídeo complexos
-      let filters = [];
-      
-      // Escala básica
-      let scaleFilter = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`;
-      
-      // Adiciona efeito Ken Burns (zoom suave) se solicitado
-      if (zoomEffect) {
-        scaleFilter += `,zoompan=z='min(zoom+0.0015,1.5)':d=${fps*duration}:s=${width}x${height}`;
-      }
-      
-      // Adiciona o filtro de transição com base no tipo selecionado
-      let transitionFilter = "";
-      switch (transition) {
-        case 'wipe':
-          transitionFilter = `xfade=transition=wipeleft:duration=${transitionDuration}`;
-          break;
-        case 'slide':
-          transitionFilter = `xfade=transition=slideright:duration=${transitionDuration}`;
-          break;
-        case 'zoom':
-          transitionFilter = `xfade=transition=zoomin:duration=${transitionDuration}`;
-          break;
-        case 'radial':
-          transitionFilter = `xfade=transition=circleclose:duration=${transitionDuration}`;
-          break;
-        case 'crosszoom':
-          transitionFilter = `xfade=transition=squeezeh:duration=${transitionDuration}`;
-          break;
-        case 'dissolve':
-          transitionFilter = `xfade=transition=dissolve:duration=${transitionDuration}`;
-          break;
-        case 'pixelize':
-          transitionFilter = `xfade=transition=pixelize:duration=${transitionDuration}`;
-          break;
-        case 'fade':
-        default:
-          transitionFilter = `xfade=transition=fade:duration=${transitionDuration}`;
-          break;
-      }
-      
-      // Adiciona efeitos de cor com base no colorGrading selecionado
-      let colorFilter = "";
-      switch (colorGrading) {
-        case 'vibrant':
-          colorFilter = "eq=saturation=1.3:contrast=1.1:brightness=1.05";
-          break;
-        case 'moody':
-          colorFilter = "eq=saturation=0.85:contrast=1.2:brightness=0.95";
-          break;
-        case 'warm':
-          colorFilter = "eq=saturation=1.1:gamma_r=1.1:gamma_b=0.9";
-          break;
-        case 'cool':
-          colorFilter = "eq=saturation=1.1:gamma_b=1.1:gamma_r=0.9";
-          break;
-        case 'cinematic':
-          colorFilter = "eq=saturation=0.9:contrast=1.25:brightness=0.95,curves=master='0/0 0.25/0.15 0.5/0.5 0.75/0.85 1/1'";
-          break;
-        case 'vintage':
-          colorFilter = "eq=saturation=0.75:contrast=1.15:brightness=1.05,colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3";
-          break;
-        case 'none':
-        default:
-          colorFilter = "";
-          break;
-      }
-      
-      // Combina os filtros
-      filters.push(scaleFilter);
-      if (colorFilter) filters.push(colorFilter);
-      
-      // Adiciona texto se fornecido, com suporte a animações
-      if (textOverlay) {
-        let yPos = "(h-text_h-25)"; // posição inferior
-        if (textPosition === 'top') yPos = "25";
-        else if (textPosition === 'center') yPos = "(h-text_h)/2";
-        
-        // Define a animação de texto com base na seleção
-        let textExpression = "";
-        switch (textAnimation) {
-          case 'typewriter':
-            // Efeito de digitação, revela o texto caractere por caractere
-            textExpression = `:enable='between(t,0,${duration})':x=(w-text_w)/2:y=${yPos}:fontcolor_expr=alpha('${textColor}',min(1,(t*3)))`;
-            break;
-          case 'fadein':
-            // Efeito de fade in para o texto
-            textExpression = `:enable='between(t,0,${duration})':x=(w-text_w)/2:y=${yPos}:alpha='if(lt(t,1),t,1)'`;
-            break;
-          case 'slidein':
-            // Efeito de deslize para o texto
-            textExpression = `:enable='between(t,0,${duration})':x='min((w-text_w)/2,w*t/2)':y=${yPos}`;
-            break;
-          default:
-            // Sem animação, texto estático
-            textExpression = `:x=(w-text_w)/2:y=${yPos}`;
-        }
-        
-        // Simplifica e corrige o processo de texto para evitar erros de processamento
-        // Garantimos que o texto seja curto e escape especial caracteres
-        let safeText = "VideoGenie"; // Texto padrão seguro
-        
-        if (textOverlay && typeof textOverlay === 'string') {
-          // Se o textOverlay for fornecido, use-o mas escape-o corretamente
-          // Limitamos o tamanho do texto e removemos caracteres especiais
-          safeText = textOverlay
-            .replace(/'/g, "") 
-            .replace(/[^\w\s.,!?]/g, "")  // Remove caracteres especiais
-            .substring(0, 50); // Limita a 50 caracteres
-            
-          // Garantir que o texto termine com um ponto final para evitar erros de parsing
-          if (!safeText.endsWith('.')) {
-            safeText += '.';
-          }
-        }
-        
-        // Converte a cor para um formato que o FFmpeg aceita
-        let safeColor = "white";
-        if (textColor && typeof textColor === 'string') {
-          // Se a cor começar com #, converte para o formato 0xRRGGBB
-          if (textColor.startsWith('#')) {
-            safeColor = textColor.replace('#', '0x') + 'FF';
-          } else if (/^[a-zA-Z]+$/.test(textColor)) {
-            // Se for um nome de cor válido, use-o diretamente
-            safeColor = textColor;
-          }
-        }
-        
-        // Aplica um filtro de texto simplificado para evitar erros de parsing no FFmpeg
-        // Removemos todas as opções avançadas como sombras, caixas, etc.
-        filters.push(`drawtext=text='${safeText}':fontsize=48:fontcolor=${safeColor}:x=(w-text_w)/2:y=${yPos}`);
-      }
-      
-      // Adiciona logo se fornecido com suporte a diferentes posições
-      if (logo) {
-        let overlayPos = "";
-        switch (logoPosition) {
-          case 'top-left':
-            overlayPos = "10:10";
-            break;
-          case 'top-right':
-            overlayPos = "W-w-10:10";
-            break;
-          case 'bottom-left':
-            overlayPos = "10:H-h-10";
-            break;
-          case 'bottom-right':
-            overlayPos = "W-w-10:H-h-10";
-            break;
-          default:
-            overlayPos = "W-w-10:10"; // Padrão: canto superior direito
-        }
-        
-        // Adiciona o filtro de overlay mais simples para evitar erros de parsing
-        filters.push(`movie=${logo},scale=150:-1 [wm];[0:v][wm] overlay=${overlayPos}`);
-      }
-      
-      // Adiciona marca d'água se fornecida - em um filtro separado
-      if (watermark && typeof watermark === 'string' && watermark.trim().length > 0) {
-        // Sanitiza a marca d'água para evitar problemas com o FFmpeg
-        const safeWatermark = watermark
-          .replace(/'/g, "")
-          .replace(/[^\w\s.,!?]/g, "")
-          .substring(0, 20); // Limita a 20 caracteres
-          
-        // Adiciona marca d'água como um filtro simples separado
-        filters.push(`drawtext=text='${safeWatermark}':fontsize=24:fontcolor=white:x=(w-text_w)/2:y=h-30`);
-      }
-      
-      // Adiciona subtítulos de arquivo externo ou automaticamente gerados
-      if (subtitleFile) {
-        // Usa o arquivo de legendas fornecido pelo usuário
-        filters.push(`subtitles=${subtitleFile}`);
-      } else if (subtitlePath) {
-        // Usa o arquivo de legendas gerado automaticamente
-        filters.push(`subtitles=${subtitlePath}`);
-      }
-      
-      // Adiciona apenas fade in para evitar erros de cálculo com fade out
-      // O cálculo fade=out:st= pode falhar se a duração total for calculada incorretamente
-      filters.push("fade=in:0:30");
-      
-      // Determina o preset de qualidade com base na opção selecionada
-      let preset = "medium";
-      let crf = "23";
-      
-      switch (outputQuality) {
-        case 'draft':
-          preset = "ultrafast";
-          crf = "28";
-          break;
-        case 'standard':
-          preset = "medium";
-          crf = "23";
-          break;
-        case 'high':
-          preset = "slow";
-          crf = "18";
-          break;
-        case 'ultra':
-          preset = "veryslow";
-          crf = "16";
-          break;
-      }
-      
-      // Otimiza os parâmetros para plataformas específicas
-      let socialMediaOptimization = [];
-      switch (social) {
-        case 'tiktok':
-          // Otimização para TikTok: relação 9:16, compressão eficiente
-          socialMediaOptimization = [
-            "-profile:v", "high", // Perfil de vídeo para melhor compressão
-            "-level", "4.2",
-            "-movflags", "+faststart",
-            "-metadata", "title=Criado com VideoGenie AI"
-          ];
-          break;
-        case 'instagram':
-          // Otimização para Instagram: qualidade maior
-          socialMediaOptimization = [
-            "-profile:v", "high",
-            "-level", "4.2",
-            "-movflags", "+faststart",
-            "-metadata", "title=Criado com VideoGenie AI"
-          ];
-          break;
-        case 'youtube':
-          // YouTube: melhor qualidade, com configurações para streaming
-          socialMediaOptimization = [
-            "-profile:v", "high",
-            "-level", "4.2",
-            "-movflags", "+faststart",
-            "-g", "60", // Keyframes a cada 2 segundos para streaming
-            "-metadata", "title=Criado com VideoGenie AI"
-          ];
-          break;
-        case 'facebook':
-          // Facebook: otimização para engajamento móvel
-          socialMediaOptimization = [
-            "-profile:v", "main",
-            "-level", "3.1", // Mais compatibilidade com dispositivos antigos
-            "-movflags", "+faststart",
-            "-metadata", "title=Criado com VideoGenie AI"
-          ];
-          break;
-        default:
-          // Default: configurações para qualquer plataforma
-          socialMediaOptimization = [
-            "-profile:v", "high",
-            "-level", "4.2",
-            "-movflags", "+faststart"
-          ];
-      }
-      
-      // Execute FFmpeg command com configurações de alta qualidade
-      const ffmpegArgs = [
-        "-f", "concat",
-        "-safe", "0",
-        "-i", listFile,
-        "-filter_complex", filters.join(","),
-        "-c:v", "libx264",
-        "-preset", preset, // Usa o preset determinado pelo nível de qualidade solicitado
-        "-crf", crf, // Valor do CRF baseado na qualidade solicitada
-        "-bf", "2", // Número de B-frames
-        "-r", fps.toString(), // Define a taxa de quadros
-        "-pix_fmt", "yuv420p", // Formato de pixel para compatibilidade
-        ...socialMediaOptimization, // Adiciona as configurações específicas para a plataforma
-        "-y", audioPath ? tempVideoPath : outputPath
-      ];
-      
-      await this.executeFFmpegCommand(ffmpegArgs);
-      
-      // Se um áudio foi fornecido, adiciona-o ao vídeo
-      if (audioPath) {
-        await this.addAudioToVideo({
-          videoPath: tempVideoPath,
-          audioPath,
-          outputFileName,
-          loop: true
-        });
-        
-        // Remove o arquivo temporário
-        if (fs.existsSync(tempVideoPath)) {
-          fs.unlinkSync(tempVideoPath);
-        }
-      }
-      
-      // Clean up the list file
-      fs.unlinkSync(listFile);
-      // Limpa o arquivo de legendas temporário se existir
-      if (subtitlePath && fs.existsSync(subtitlePath)) {
-        fs.unlinkSync(subtitlePath);
-      }
-      
-      return outputPath;
-    } catch (error) {
-      log(`Error creating video from images: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
-      throw error;
     }
   }
 
   /**
-   * Add audio to video
+   * Cria um arquivo de áudio silencioso com a duração especificada
    */
-  async addAudioToVideo(options: AddAudioOptions): Promise<string> {
-    const {
-      videoPath,
-      audioPath,
-      outputFileName,
-      loop = true,
-    } = options;
-
-    try {
-      console.log(`Adicionando áudio ao vídeo: 
-        - Vídeo: ${videoPath}
-        - Áudio: ${audioPath}
-        - Loop: ${loop}
-        - Output: ${outputFileName}
-      `);
-      
-      // Verificar se os arquivos existem e são acessíveis
-      if (!fs.existsSync(videoPath)) {
-        throw new Error(`Arquivo de vídeo não encontrado: ${videoPath}`);
-      }
-      
-      if (!fs.existsSync(audioPath)) {
-        throw new Error(`Arquivo de áudio não encontrado: ${audioPath}`);
-      }
-      
-      // Certifique-se de que o diretório de saída existe
-      if (!fs.existsSync(OUTPUT_DIR)) {
-        fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-        console.log(`Diretório criado: ${OUTPUT_DIR}`);
-      }
-      
-      const outputPath = path.join(OUTPUT_DIR, outputFileName);
-      
-      // Usando duração fixa já que o getVideoMetadata não depende do ffprobe
-      const videoMetadata = await this.getVideoMetadata(videoPath);
-      console.log(`Metadata do vídeo:`, videoMetadata);
-      
-      // Construir o comando ffmpeg com argumentos simplificados para maior compatibilidade
-      // Isso evita problemas com normalização complexa e filtros que podem falhar
-      const ffmpegArgs = [
-        "-i", videoPath,
-        "-i", audioPath,
-        "-c:v", "copy",      // Manter o vídeo original sem recodificação
-        "-c:a", "aac",       // Converter áudio para AAC (maior compatibilidade)
-        "-b:a", "192k"       // Bitrate de áudio de boa qualidade
-      ];
-      
-      // Apenas ativar o loop se especificado, de forma simplificada
-      if (loop) {
-        // Uma abordagem mais simples e confiável para fazer o loop do áudio
-        // A duração já está definida pelo parâmetro -shortest abaixo
-        ffmpegArgs.push("-af", "aloop=loop=-1:size=2e+09");
-      }
-      
-      // Finalizar com o caminho de saída e garantir que o mais curto (áudio ou vídeo) determina o final
-      ffmpegArgs.push(
-        "-shortest",         // Terminar quando o mais curto dos streams terminar
-        "-y",                // Sobrescrever arquivo existente se necessário
-        outputPath           // Caminho do arquivo de saída
-      );
-      
-      console.log("Executando comando FFmpeg:", ffmpegArgs.join(' '));
-      
-      // Executar o comando e aguardar a conclusão
-      await this.executeFFmpegCommand(ffmpegArgs);
-      
-      console.log(`Áudio adicionado com sucesso. Arquivo salvo em: ${outputPath}`);
-      return outputPath;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Erro ao adicionar áudio ao vídeo: ${errorMessage}`);
-      log(`Error adding audio to video: ${errorMessage}`, 'ffmpeg');
-      throw error;
-    }
-  }
-
-  /**
-   * Combine multiple videos into one
-   */
-  async combineVideos(options: CombineVideosOptions): Promise<string> {
-    const {
-      videoPaths,
-      outputFileName,
-      transition = "fade",
-      transitionDuration = 0.5,
-    } = options;
-
-    if (videoPaths.length === 0) {
-      throw new Error("No video paths provided");
-    }
-
-    try {
-      const outputPath = path.join(OUTPUT_DIR, outputFileName);
-      
-      // Create a temporary file for the list of videos
-      const listFile = path.join(TEMP_DIR, `list_${Date.now()}.txt`);
-      
-      // Create the content for the list file
-      let listContent = "";
-      console.log('Processing videos for combination:');
-      for (const videoPath of videoPaths) {
-        // Escape single quotes in the path
-        const escapedPath = videoPath.replace(/'/g, "'\\''");
-        console.log(`- Using video: ${escapedPath}`);
-        listContent += `file '${escapedPath}'\n`;
-      }
-      
-      // Write the list file
-      fs.writeFileSync(listFile, listContent);
-      
-      // Execute FFmpeg command com alta qualidade
-      const ffmpegArgs = [
-        "-f", "concat",
-        "-safe", "0",
-        "-i", listFile,
-        "-c:v", "libx264",
-        "-preset", "slow", // Usa 'slow' em vez de 'medium' para melhor qualidade
-        "-crf", "18", // Valor menor = melhor qualidade (18 é considerado visualmente sem perdas)
-        "-profile:v", "high", // Utiliza o profile High para melhor compressão
-        "-level", "4.2", // Compatível com a maioria dos dispositivos modernos
-        "-bf", "2", // Número de B-frames
-        "-c:a", "aac", // Codec de áudio AAC
-        "-b:a", "192k", // Bitrate de áudio aumentado
-        "-ar", "48000", // Taxa de amostragem de áudio
-        "-af", "dynaudnorm=f=150:g=15", // Normalização dinâmica de áudio
-        "-movflags", "+faststart", // Permite reprodução enquanto carrega
-        "-pix_fmt", "yuv420p", // Formato de pixel para compatibilidade
-        "-y", outputPath
-      ];
-      
-      await this.executeFFmpegCommand(ffmpegArgs);
-      
-      // Clean up the list file
-      fs.unlinkSync(listFile);
-      
-      return outputPath;
-    } catch (error) {
-      log(`Error combining videos: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
-      throw error;
-    }
-  }
-
-  /**
-   * Create a basic video with text overlay
-   */
-  async createTextVideo(text: string, options: VideoOptions): Promise<string> {
-    const {
-      outputFileName,
-      width = 1080,
-      height = 1920,
-      frameRate = 30,
-      bitrate = "2M",
-    } = options;
-
-    try {
-      const outputPath = path.join(OUTPUT_DIR, outputFileName);
-      
-      // Sanitize text to prevent FFmpeg command injection issues
-      let safeText = "VideoGenie"; // Default text
-      if (text && typeof text === 'string') {
-        // Remove single quotes and non-standard characters, limit length
-        safeText = text
-          .replace(/'/g, "")
-          .replace(/[^\w\s.,!?]/g, "")
-          .substring(0, 50);
-      }
-      
-      // Simplificamos para um fundo sólido em vez de gradiente para maior compatibilidade
-      const backgroundColor = "blue";
-      
-      // Build complex filter for text overlay with fade effects
-      const vfFilter = 
-        `drawtext=text='${safeText}':fontcolor=white:fontsize=72:` +
-        `x=(w-text_w)/2:y=(h-text_h)/2:shadowcolor=black@0.5:shadowx=2:shadowy=2:` +
-        `box=1:boxcolor=black@0.4:boxborderw=10,fade=in:0:30,fade=out:270:30`;
-      
-      // Simplified and secure FFmpeg command
-      const ffmpegArgs = [
-        "-f", "lavfi",
-        "-i", `color=c=${backgroundColor}:s=${width}x${height}:d=10`,
-        "-vf", vfFilter,
-        "-c:v", "libx264",
-        "-t", "10",
-        "-r", frameRate.toString(),
-        "-preset", "medium",
-        "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        "-y", outputPath
-      ];
-      
-      console.log(`Creating text video with text: "${safeText}"`);
-      await this.executeFFmpegCommand(ffmpegArgs);
-      
-      return outputPath;
-    } catch (error) {
-      log(`Error creating text video: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
-      throw error;
-    }
-  }
-
-  /**
-   * Gera arquivo de legendas SRT a partir de um texto
-   * Utilizado para sincronizar texto com vídeo automaticamente
-   */
-  async generateSubtitleFile(text: string, duration: number, outputFileName: string): Promise<string> {
-    try {
-      // Quebra o texto em linhas para criar legendas
-      const lines = text.split(/[.!?]+/).filter(line => line.trim().length > 0);
-      const subtitleFilePath = path.join(TEMP_DIR, outputFileName);
-      
-      // Se não houver texto, retorna vazio
-      if (lines.length === 0) {
-        return "";
-      }
-      
-      // Calcula o tempo por linha para distribuir as legendas uniformemente
-      const timePerLine = duration / lines.length;
-      
-      // Gera o conteúdo SRT
-      let srtContent = "";
-      lines.forEach((line, index) => {
-        const startTime = index * timePerLine;
-        const endTime = (index + 1) * timePerLine;
-        
-        // Formata os tempos no formato SRT (HH:MM:SS,ms)
-        const startFormatted = this.formatSRTTime(startTime);
-        const endFormatted = this.formatSRTTime(endTime);
-        
-        // Adiciona a entrada SRT
-        srtContent += `${index + 1}\n`;
-        srtContent += `${startFormatted} --> ${endFormatted}\n`;
-        srtContent += `${line.trim()}\n\n`;
-      });
-      
-      // Escreve o arquivo SRT
-      fs.writeFileSync(subtitleFilePath, srtContent);
-      
-      return subtitleFilePath;
-    } catch (error) {
-      log(`Error generating subtitle file: ${error instanceof Error ? error.message : String(error)}`, 'ffmpeg');
-      return "";
-    }
-  }
-  
-  /**
-   * Formata o tempo em segundos para o formato SRT (HH:MM:SS,ms)
-   */
-  private formatSRTTime(seconds: number): string {
-    const date = new Date(seconds * 1000);
-    const hours = date.getUTCHours().toString().padStart(2, '0');
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const secs = date.getUTCSeconds().toString().padStart(2, '0');
-    const ms = date.getUTCMilliseconds().toString().padStart(3, '0');
-    
-    return `${hours}:${minutes}:${secs},${ms}`;
-  }
-
-  /**
-   * Get video metadata (duration, dimensions, etc.)
-   */
-  async getVideoMetadata(videoPath: string): Promise<VideoMetadata> {
-    // Verificar se o arquivo existe
-    if (!fs.existsSync(videoPath)) {
-      throw new Error(`Arquivo de vídeo não encontrado: ${videoPath}`);
-    }
-    
-    // Implementação alternativa que não depende do ffprobe
-    // Retorna metadados fixos para evitar erros e permitir o teste da funcionalidade
-    return {
-      duration: 10, // segundos
-      width: 1080,
-      height: 1920,
-      format: "mp4"
-    };
-  }
-
-  /**
-   * Execute FFmpeg command
-   */
-  private executeFFmpegCommand(args: string[]): Promise<void> {
+  async createSilentAudio(outputPath: string, durationSeconds: number = 1): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Utilize o pacote ffmpeg-static para maior compatibilidade
-      if (!ffmpegPath) {
-        reject(new Error("FFmpeg path not found. Please install ffmpeg-static package."));
-        return;
-      }
-      
-      const ffmpeg = spawn(ffmpegPath, args);
-      
-      let stderrData = "";
-      
-      ffmpeg.stderr.on("data", (data) => {
-        stderrData += data.toString();
-        // Log progress for debugging
-        log(data.toString().trim(), 'ffmpeg');
-      });
-      
-      ffmpeg.on("error", (err) => {
-        reject(new Error(`Failed to start FFmpeg process: ${err.message}`));
-      });
-      
-      ffmpeg.on("close", (code) => {
-        if (code !== 0) {
-          reject(new Error(`FFmpeg process exited with code ${code}: ${stderrData}`));
-          return;
+      execFile('ffmpeg', [
+        '-f', 'lavfi',
+        '-i', `anullsrc=r=44100:cl=stereo`,
+        '-t', durationSeconds.toString(),
+        '-c:a', 'libmp3lame',
+        '-q:a', '2',
+        outputPath
+      ], (error, stdout, stderr) => {
+        if (error) {
+          log(`Erro ao criar áudio silencioso: ${error.message}`, 'ffmpeg');
+          log(`FFmpeg stderr: ${stderr}`, 'ffmpeg');
+          return reject(error);
         }
-        
         resolve();
       });
     });
   }
+
+  /**
+   * Converte um arquivo de áudio para outro formato
+   */
+  async convertAudioFormat(inputPath: string, outputPath: string, outputFormat: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      execFile('ffmpeg', [
+        '-i', inputPath,
+        '-c:a', this.getAudioCodecForFormat(outputFormat),
+        '-q:a', '2',
+        outputPath
+      ], (error, stdout, stderr) => {
+        if (error) {
+          log(`Erro ao converter áudio: ${error.message}`, 'ffmpeg');
+          log(`FFmpeg stderr: ${stderr}`, 'ffmpeg');
+          return reject(error);
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Retorna o codec apropriado para o formato de áudio especificado
+   */
+  private getAudioCodecForFormat(format: string): string {
+    const codecMap: Record<string, string> = {
+      'mp3': 'libmp3lame',
+      'wav': 'pcm_s16le',
+      'ogg': 'libvorbis',
+      'aac': 'aac'
+    };
+    return codecMap[format.toLowerCase()] || 'libmp3lame';
+  }
+
+  /**
+   * Obtém a versão do FFmpeg
+   */
+  async getVersion(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      execFile('ffmpeg', ['-version'], (error, stdout, stderr) => {
+        if (error) {
+          log(`Erro ao obter versão do FFmpeg: ${error.message}`, 'ffmpeg');
+          return reject(error);
+        }
+        const version = stdout.split('\n')[0] || 'Versão desconhecida';
+        resolve(version);
+      });
+    });
+  }
 }
+
+// Instância singleton
+export const ffmpegService = new FFmpegService();

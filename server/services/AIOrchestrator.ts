@@ -3,6 +3,7 @@ import { MistralAIService } from './mistral';
 import { HuggingFaceService } from './huggingface';
 import { OpenAIService } from './openai';
 import { GeminiService } from './gemini';
+import { localFallbackService } from './local-fallback';
 
 // Tipos compartilhados com os serviços de IA
 interface ScriptGenerationOptions {
@@ -156,29 +157,52 @@ export class AIOrchestrator {
       }
     }
 
-    // 5. Se todas as opções falharem, usar um roteiro básico baseado no tema
-    log('Todos os serviços de IA falharam. Usando roteiro de emergência.', 'ai-orchestrator');
+    // 5. Tenta com o serviço de fallback local
+    log('Todos os serviços de IA online falharam. Tentando serviço de fallback local.', 'ai-orchestrator');
     
-    const { 
-      theme, 
-      targetAudience = "geral", 
-      duration = 60, 
-      tone = "informativo",
-      keywords = []
-    } = options;
-    
-    // Roteiro básico de emergência com estrutura mínima
-    return {
-      title: fallbackTitle,
-      introduction: `Bem-vindo a este vídeo sobre ${theme} para o público ${targetAudience}.`,
-      mainPoints: [
-        `${theme} é um tópico importante para considerar.`,
-        `Existem vários aspectos a serem considerados sobre ${theme}.`,
-        keywords.length > 0 ? `Alguns pontos-chave incluem: ${keywords.join(', ')}.` : `Vamos explorar mais sobre ${theme}.`
-      ],
-      conclusion: `Obrigado por assistir este vídeo sobre ${theme}. Não se esqueça de deixar seu comentário e se inscrever para mais conteúdo.`,
-      fullScript: `Bem-vindo a este vídeo sobre ${theme} para o público ${targetAudience}.\n\n${theme} é um tópico importante para considerar.\nExistem vários aspectos a serem considerados sobre ${theme}.\n${keywords.length > 0 ? `Alguns pontos-chave incluem: ${keywords.join(', ')}.` : `Vamos explorar mais sobre ${theme}.`}\n\nObrigado por assistir este vídeo sobre ${theme}. Não se esqueça de deixar seu comentário e se inscrever para mais conteúdo.`
-    };
+    try {
+      // Usar o serviço local de fallback que não depende de APIs externas
+      const fallbackResult = await localFallbackService.generateVideoScript(options);
+      
+      // Converter a resposta do serviço local para o formato esperado
+      return {
+        title: fallbackResult.title,
+        introduction: fallbackResult.script.split('\n\n')[0] || "Introdução",
+        mainPoints: fallbackResult.script.split('\n\n')
+          .slice(1, -1)
+          .map(p => p.trim())
+          .filter(p => p.length > 0),
+        conclusion: fallbackResult.script.split('\n\n').pop() || "Conclusão",
+        fullScript: fallbackResult.script,
+        videoLengthSeconds: fallbackResult.videoLengthSeconds,
+        _fallback: true
+      };
+    } catch (error) {
+      // 6. Se até mesmo o fallback local falhar, usar um script mínimo de emergência
+      log('Serviço de fallback local falhou. Usando roteiro de emergência absoluto.', 'ai-orchestrator');
+      
+      const { 
+        theme, 
+        targetAudience = "geral", 
+        duration = 60, 
+        tone = "informativo",
+        keywords = []
+      } = options;
+      
+      // Roteiro básico de emergência com estrutura mínima
+      return {
+        title: fallbackTitle,
+        introduction: `Bem-vindo a este vídeo sobre ${theme} para o público ${targetAudience}.`,
+        mainPoints: [
+          `${theme} é um tópico importante para considerar.`,
+          `Existem vários aspectos a serem considerados sobre ${theme}.`,
+          keywords.length > 0 ? `Alguns pontos-chave incluem: ${keywords.join(', ')}.` : `Vamos explorar mais sobre ${theme}.`
+        ],
+        conclusion: `Obrigado por assistir este vídeo sobre ${theme}. Não se esqueça de deixar seu comentário e se inscrever para mais conteúdo.`,
+        fullScript: `Bem-vindo a este vídeo sobre ${theme} para o público ${targetAudience}.\n\n${theme} é um tópico importante para considerar.\nExistem vários aspectos a serem considerados sobre ${theme}.\n${keywords.length > 0 ? `Alguns pontos-chave incluem: ${keywords.join(', ')}.` : `Vamos explorar mais sobre ${theme}.`}\n\nObrigado por assistir este vídeo sobre ${theme}. Não se esqueça de deixar seu comentário e se inscrever para mais conteúdo.`,
+        _emergencyFallback: true
+      };
+    }
   }
 
   /**
@@ -247,36 +271,55 @@ export class AIOrchestrator {
       }
     }
 
-    // 5. Se todas as opções falharem, criar um conteúdo básico a partir do roteiro
-    log('Todos os serviços de IA falharam. Usando geração de conteúdo de emergência.', 'ai-orchestrator');
+    // 5. Tenta com o serviço de fallback local
+    log('Todos os serviços de IA online falharam. Tentando serviço de fallback local para conteúdo social.', 'ai-orchestrator');
     
-    const { 
-      title = true, 
-      description = true, 
-      hashtags = true, 
-      count = 5 
-    } = options;
-    
-    const scriptWords = videoScript.split(' ');
-    
-    // Extrair possíveis hashtags do roteiro (palavras com mais de 4 letras)
-    const possibleTags = scriptWords
-      .filter(word => word.length > 4)
-      .map(word => word.replace(/[^a-zA-Z0-9áàâãéèêíìóòôõúùûç]/g, ''))
-      .filter(word => word.length > 4)
-      .slice(0, count);
-    
-    // Remover duplicados
-    const uniqueTags = possibleTags.filter((value, index, self) => 
-      self.indexOf(value) === index
-    );
-    
-    // Construir resultado de emergência
-    return {
-      title: title ? probableTitle : undefined,
-      description: description ? `Confira este vídeo sobre ${scriptLines[0] || 'este tema interessante'}. Não deixe de curtir e compartilhar!` : undefined,
-      hashtags: hashtags ? uniqueTags : undefined
-    };
+    try {
+      // Usar o serviço local de fallback que não depende de APIs externas
+      const result = await localFallbackService.generateSocialMediaContent(videoScript, options);
+      return {
+        title: result.instagram.split('\n')[0],
+        description: result.instagram,
+        hashtags: result.hashtags,
+        instagram: result.instagram,
+        facebook: result.facebook,
+        twitter: result.twitter,
+        tiktok: result.tiktok,
+        _fallback: true
+      };
+    } catch (error) {
+      // 6. Se até mesmo o fallback local falhar, criar um conteúdo básico a partir do roteiro
+      log('Serviço de fallback local falhou. Usando geração de conteúdo de emergência absoluta.', 'ai-orchestrator');
+      
+      const { 
+        title = true, 
+        description = true, 
+        hashtags = true, 
+        count = 5 
+      } = options;
+      
+      const scriptWords = videoScript.split(' ');
+      
+      // Extrair possíveis hashtags do roteiro (palavras com mais de 4 letras)
+      const possibleTags = scriptWords
+        .filter(word => word.length > 4)
+        .map(word => word.replace(/[^a-zA-Z0-9áàâãéèêíìóòôõúùûç]/g, ''))
+        .filter(word => word.length > 4)
+        .slice(0, count);
+      
+      // Remover duplicados
+      const uniqueTags = possibleTags.filter((value, index, self) => 
+        self.indexOf(value) === index
+      );
+      
+      // Construir resultado de emergência
+      return {
+        title: title ? probableTitle : undefined,
+        description: description ? `Confira este vídeo sobre ${scriptLines[0] || 'este tema interessante'}. Não deixe de curtir e compartilhar!` : undefined,
+        hashtags: hashtags ? uniqueTags : undefined,
+        _emergencyFallback: true
+      };
+    }
   }
 
   /**
@@ -338,16 +381,25 @@ export class AIOrchestrator {
       }
     }
 
-    // 5. Se todas as opções falharem, cria alguns tópicos genéricos baseados no tema
-    log('Todos os serviços de IA falharam. Usando sugestão de tópicos de emergência.', 'ai-orchestrator');
+    // 5. Tenta com o serviço de fallback local
+    log('Todos os serviços de IA online falharam. Tentando serviço de fallback local para tópicos.', 'ai-orchestrator');
     
-    return [
-      `${theme} para iniciantes`,
-      `Como melhorar seus resultados com ${theme}`,
-      `${theme} em 2024: tendências e novidades`,
-      `Dicas essenciais sobre ${theme}`,
-      `${theme}: melhores práticas e estratégias`
-    ].slice(0, count);
+    try {
+      // Usar o serviço local de fallback que não depende de APIs externas
+      const fallbackTopics = await localFallbackService.suggestTrendingTopics(theme, count);
+      return fallbackTopics;
+    } catch (error) {
+      // 6. Se até mesmo o fallback local falhar, criar tópicos de emergência genéricos
+      log('Serviço de fallback local falhou. Usando sugestão de tópicos de emergência absoluta.', 'ai-orchestrator');
+      
+      return [
+        `${theme} para iniciantes`,
+        `Como melhorar seus resultados com ${theme}`,
+        `${theme} em 2024: tendências e novidades`,
+        `Dicas essenciais sobre ${theme}`,
+        `${theme}: melhores práticas e estratégias`
+      ].slice(0, count);
+    }
   }
 
   /**
