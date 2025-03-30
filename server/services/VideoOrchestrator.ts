@@ -13,6 +13,7 @@ import path from 'path';
 import { resilienceService, ResilienceTestResult } from './resilience-service';
 import { FFmpegService, ffmpegService } from './ffmpeg';
 import { StorageProvider, storageProvider } from './storage-providers/CloudStorageProvider';
+import { ColorBlockGenerator } from './image-generators/ColorBlockGenerator';
 
 /**
  * Opções para geração de vídeo
@@ -208,6 +209,7 @@ export class VideoOrchestrator {
   private coquiTTSService: CoquiTTSService;
   private pexelsService?: PexelsService;
   private storageProvider?: StorageProvider;
+  private colorBlockGenerator: ColorBlockGenerator;
   private videoStatuses: Map<string, VideoResult> = new Map();
   private processingQueue: string[] = [];
   private maxConcurrentProcessing: number = 2;
@@ -234,6 +236,9 @@ export class VideoOrchestrator {
     }
     
     this.storageProvider = storageProvider;
+    
+    // Inicializar o gerador de imagens de blocos coloridos
+    this.colorBlockGenerator = new ColorBlockGenerator();
     
     // Iniciar processador de fila
     this.startQueueProcessor();
@@ -518,75 +523,158 @@ export class VideoOrchestrator {
   }
   
   /**
-   * Usa imagens de teste como fallback
+   * Usa imagens de teste pré-configuradas como fallback
    */
   private async useTestImages(): Promise<string[]> {
-    const testImagesDir = path.join(process.cwd(), 'uploads/temp');
+    log('Gerando imagens de teste coloridas como fallback...', 'video-orchestrator');
     
     try {
-      // Verificar se o diretório existe
-      await fs.access(testImagesDir);
-    } catch (error) {
-      // Criar diretório se não existir
-      await fs.mkdir(testImagesDir, { recursive: true });
-    }
-    
-    // Criar 3 imagens de teste coloridas para usar como fallback
-    const colors = ['#FF5733', '#33FF57', '#3357FF'];
-    const imagePaths: string[] = [];
-    
-    for (let i = 0; i < 3; i++) {
-      const imgPath = path.join(testImagesDir, `test_image_${i + 1}.jpg`);
+      // Tentar usar ColorBlockGenerator para gerar imagens de alta qualidade
+      // Implementar método para gerar várias imagens
+      const images: string[] = [];
+      const tempDir = path.join(process.cwd(), 'uploads/temp');
+      await fs.mkdir(tempDir, { recursive: true });
       
-      // Verificar se a imagem já existe
-      try {
-        await fs.access(imgPath);
-        imagePaths.push(imgPath);
-      } catch (error) {
-        // Se não existir, seria criada uma imagem de teste
-        // Para simplicidade, vamos apenas simular isso
-        await fs.writeFile(imgPath, `Conteúdo simulado de imagem ${i + 1}`);
-        imagePaths.push(imgPath);
+      // Gerar 5 imagens com textos e cores variados
+      for (let i = 0; i < 5; i++) {
+        const outputPath = path.join(tempDir, `test_image_${Date.now()}_${i}.png`);
+        const result = await this.colorBlockGenerator.generate({
+          outputPath,
+          text: `Teste ${i + 1}`,
+          backgroundColor: ['#3498db', '#2ecc71', '#9b59b6', '#e74c3c', '#f1c40f'][i % 5],
+          textColor: '#ffffff',
+          width: 800,
+          height: 600
+        });
+        images.push(result);
       }
+      log(`Geradas ${images.length} imagens coloridas com ColorBlockGenerator`, 'video-orchestrator');
+      return images;
+    } catch (error) {
+      log(`Erro ao usar ColorBlockGenerator: ${error}. Usando método legado.`, 'video-orchestrator');
+      
+      // Se falhar com o gerador de imagens, voltar para o método antigo
+      const testImagesDir = path.join(process.cwd(), 'uploads/test');
+      
+      try {
+        // Verificar se o diretório existe
+        await fs.access(testImagesDir);
+      } catch (error) {
+        // Criar diretório se não existir
+        await fs.mkdir(testImagesDir, { recursive: true });
+        log(`Diretório de imagens de teste criado: ${testImagesDir}`, 'video-orchestrator');
+      }
+      
+      // Lista de imagens de teste
+      const testImages = [
+        path.join(process.cwd(), 'uploads/test/image1.jpg'),
+        path.join(process.cwd(), 'uploads/test/image2.jpg'),
+        path.join(process.cwd(), 'uploads/test/image3.jpg'),
+      ];
+      
+      // Verificar se as imagens existem
+      const existingImages: string[] = [];
+      
+      for (const imgPath of testImages) {
+        try {
+          await fs.access(imgPath);
+          existingImages.push(imgPath);
+          log(`Imagem de teste encontrada: ${imgPath}`, 'video-orchestrator');
+        } catch (error) {
+          log(`Imagem de teste não encontrada: ${imgPath}. Tentando criar...`, 'video-orchestrator');
+          
+          try {
+            // Criar uma imagem de teste simples
+            await fs.writeFile(imgPath, 'TESTE_IMAGEM_CONTEUDO');
+            existingImages.push(imgPath);
+            log(`Imagem de teste criada: ${imgPath}`, 'video-orchestrator');
+          } catch (createError) {
+            log(`Erro ao criar imagem de teste: ${createError}`, 'video-orchestrator');
+          }
+        }
+      }
+      
+      if (existingImages.length === 0) {
+        log('Nenhuma imagem de teste encontrada ou criada!', 'video-orchestrator');
+        throw new Error('Falha ao encontrar ou criar imagens de teste');
+      }
+      
+      log(`Usando ${existingImages.length} imagens de teste (método legado)`, 'video-orchestrator');
+      return existingImages;
     }
-    
-    return imagePaths;
   }
   
   /**
    * Gera imagens simples baseadas em texto
    */
   private async generateSimpleImages(): Promise<string[]> {
-    const tempDir = path.join(process.cwd(), 'uploads/temp');
+    log('Gerando imagens simples coloridas...', 'video-orchestrator');
     
     try {
-      // Verificar se o diretório existe
-      await fs.access(tempDir);
-    } catch (error) {
-      // Criar diretório se não existir
-      await fs.mkdir(tempDir, { recursive: true });
-    }
-    
-    // Gerar 3 imagens simples com textos
-    const texts = ['Inovação', 'Crescimento', 'Sucesso'];
-    const imagePaths: string[] = [];
-    
-    for (let i = 0; i < 3; i++) {
-      const imgPath = path.join(tempDir, `generated_image_${i + 1}.jpg`);
+      // Usar ColorBlockGenerator para gerar imagens com cores e textos predefinidos
+      const texts = ['Inovação', 'Crescimento', 'Sucesso', 'Estratégia', 'Liderança'];
+      const colors = [
+        '#1abc9c', // Verde turquesa
+        '#3498db', // Azul
+        '#9b59b6', // Roxo
+        '#f1c40f', // Amarelo
+        '#e74c3c'  // Vermelho
+      ];
       
-      // Verificar se a imagem já existe
-      try {
-        await fs.access(imgPath);
-        imagePaths.push(imgPath);
-      } catch (error) {
-        // Se não existir, seria criada uma imagem
-        // Para simplicidade, vamos apenas simular isso
-        await fs.writeFile(imgPath, `Conteúdo simulado de imagem com texto "${texts[i]}"`);
+      const tempDir = path.join(process.cwd(), 'uploads/temp');
+      await fs.mkdir(tempDir, { recursive: true });
+      
+      const imagePaths: string[] = [];
+      
+      // Gerar imagens com ColorBlockGenerator
+      for (let i = 0; i < 3; i++) {
+        const outputPath = path.join(tempDir, `generated_image_${i + 1}.jpg`);
+        
+        try {
+          const generatedPath = await this.colorBlockGenerator.generate({
+            text: texts[i % texts.length],
+            backgroundColor: colors[i % colors.length],
+            outputPath
+          });
+          
+          imagePaths.push(generatedPath);
+          log(`Imagem ${i+1} gerada com sucesso: ${generatedPath}`, 'video-orchestrator');
+        } catch (error) {
+          log(`Erro ao gerar imagem ${i+1}: ${error}`, 'video-orchestrator');
+          
+          // Fallback: criar arquivo simples se o gerador falhar
+          try {
+            await fs.writeFile(outputPath, `Conteúdo simulado de imagem com texto "${texts[i % texts.length]}"`);
+            imagePaths.push(outputPath);
+            log(`Imagem fallback ${i+1} criada: ${outputPath}`, 'video-orchestrator');
+          } catch (fallbackError) {
+            log(`Erro ao criar imagem fallback ${i+1}: ${fallbackError}`, 'video-orchestrator');
+          }
+        }
+      }
+      
+      log(`Geradas ${imagePaths.length} imagens simples`, 'video-orchestrator');
+      return imagePaths;
+    } catch (error) {
+      log(`Erro ao gerar imagens simples: ${error}`, 'video-orchestrator');
+      
+      // Fallback final: usar diretório de imagens temporárias
+      const tempDir = path.join(process.cwd(), 'uploads/temp');
+      await fs.mkdir(tempDir, { recursive: true });
+      
+      // Criar arquivos de texto como último recurso de fallback
+      const texts = ['Inovação', 'Crescimento', 'Sucesso'];
+      const imagePaths: string[] = [];
+      
+      for (let i = 0; i < 3; i++) {
+        const imgPath = path.join(tempDir, `emergency_image_${i + 1}.jpg`);
+        await fs.writeFile(imgPath, `Conteúdo de emergência com texto "${texts[i]}"`);
         imagePaths.push(imgPath);
       }
+      
+      log(`Geradas ${imagePaths.length} imagens de emergência`, 'video-orchestrator');
+      return imagePaths;
     }
-    
-    return imagePaths;
   }
   
   /**

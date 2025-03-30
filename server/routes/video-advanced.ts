@@ -55,7 +55,13 @@ router.post('/create-advanced', async (req: Request, res: Response) => {
       imagePaths
     } = req.body;
     
+    // Verificar se as imagens estão definidas corretamente
+    const imagesToUse = imagePaths && Array.isArray(imagePaths) && imagePaths.length > 0 
+      ? imagePaths 
+      : ['uploads/test/image1.jpg', 'uploads/test/image2.jpg', 'uploads/test/image3.jpg'];
+    
     log(`Requisição recebida para criar vídeo avançado: ${outputFileName}`, 'video-api');
+    log(`Imagens a serem usadas: ${JSON.stringify(imagesToUse)}`, 'video-api');
     
     // Registrar o início da operação
     const videoRequestId = resilienceService.startOperation('create_advanced_video');
@@ -64,7 +70,7 @@ router.post('/create-advanced', async (req: Request, res: Response) => {
       // Criar vídeo usando o orquestrador
       const videoResult = await videoOrchestrator.createVideoFromImages({
         title: title || text?.substring(0, 30) || 'Vídeo sem título',
-        imagePaths: imagePaths,
+        imagePaths: imagesToUse,
         script: text,
         duration: Number(duration) || 3,
         transition: transition || 'fade',

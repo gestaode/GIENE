@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   Video,
-  TestTube
+  TestTube,
+  Image as ImageIcon
 } from "lucide-react";
 
 type NavItem = {
@@ -64,8 +65,13 @@ export function Sidebar() {
     },
     {
       href: "/test-advanced-video",
-      label: "Teste Avançado",
+      label: "Teste de Vídeo",
       icon: <TestTube size={20} />,
+    },
+    {
+      href: "/image-tester",
+      label: "Gerador de Imagens",
+      icon: <ImageIcon size={20} />,
     },
   ];
 

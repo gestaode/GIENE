@@ -15,6 +15,7 @@ import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import TestAdvancedVideo from "@/pages/test-advanced-video";
 import FFmpegTester from "@/pages/ffmpeg-tester";
+import ImageTester from "@/pages/image-tester";
 
 function MainLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -104,6 +105,13 @@ function Router() {
         {() => (
           <MainLayout>
             <FFmpegTester />
+          </MainLayout>
+        )}
+      </Route>
+      <Route path="/image-tester">
+        {() => (
+          <MainLayout>
+            <ImageTester />
           </MainLayout>
         )}
       </Route>
