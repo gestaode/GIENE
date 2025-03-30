@@ -2658,8 +2658,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar versão do FFmpeg
       const version = await ffmpegService.getVersion();
       
-      // Verificar informações adicionais de codecs
-      const { spawn } = require('child_process');
+      // Usando child_process diretamente em vez de require
+      const { spawn } = await import('child_process');
       
       // Função para executar comando e obter saída
       const execCommand = (command: string, args: string[]): Promise<string> => {
@@ -2689,11 +2689,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       };
       
-      // Verificar codecs
-      const codecsOutput = await execCommand('ffmpeg', ['-codecs']);
+      // Obter informações dos codecs e formatos usando comando direto
+      let codecsOutput = '';
+      let formatsOutput = '';
       
-      // Verificar formatos
-      const formatsOutput = await execCommand('ffmpeg', ['-formats']);
+      try {
+        codecsOutput = await execCommand('ffmpeg', ['-codecs']);
+        formatsOutput = await execCommand('ffmpeg', ['-formats']);
+      } catch (cmdError) {
+        console.error("Erro ao executar comandos ffmpeg:", cmdError);
+      }
       
       // Analisar as informações para detalhes
       const hasH264 = codecsOutput.includes('h264');
@@ -2721,25 +2726,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.mkdirSync(testDir, { recursive: true });
       }
       
-      // Criar uma imagem simples para teste
-      const { createCanvas } = require('canvas');
-      const canvas = createCanvas(640, 480);
-      const ctx = canvas.getContext('2d');
-      
-      // Preencher fundo
-      ctx.fillStyle = '#3357ff';
-      ctx.fillRect(0, 0, 640, 480);
-      
-      // Adicionar texto
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 36px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('Teste FFmpeg', 320, 240);
-      
-      // Salvar imagem
-      const buffer = canvas.toBuffer('image/png');
+      // Criar imagem de teste diretamente em vez de usar Canvas
+      // Vamos usar um método mais simples para gerar uma imagem de teste
       const imagePath = path.join(testDir, 'test_ffmpeg.png');
-      fs.writeFileSync(imagePath, buffer);
+      
+      // Verificar se já existe uma imagem de teste para usar
+      const usarImagemExistente = fs.existsSync(imagePath);
+      
+      if (!usarImagemExistente) {
+        // Se não existe, criar uma imagem simples com texto usando o próprio ffmpeg
+        const textoCmd = [
+          '-f', 'lavfi', 
+          '-i', 'color=c=blue:s=640x480:d=1', 
+          '-vf', "drawtext=text='Teste FFmpeg':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2",
+          '-frames:v', '1', 
+          imagePath
+        ];
+        
+        try {
+          await execCommand('ffmpeg', textoCmd);
+        } catch (err) {
+          console.error("Erro ao criar imagem de teste:", err);
+          // Fallback: usar uma imagem que já exista no sistema
+          // Procurar por alguma imagem png no diretório uploads
+          const allFiles = fs.readdirSync('./uploads');
+          const pngFile = allFiles.find(f => f.endsWith('.png'));
+          
+          if (pngFile) {
+            fs.copyFileSync(path.join('./uploads', pngFile), imagePath);
+          } else {
+            // Se não houver nenhuma imagem, retornar erro
+            return res.status(500).json({
+              success: false,
+              message: "Não foi possível criar uma imagem de teste para o FFmpeg",
+            });
+          }
+        }
+      }
       
       // Criar vídeo simples a partir da imagem
       const outputFileName = `test_ffmpeg_${Date.now()}.mp4`;
