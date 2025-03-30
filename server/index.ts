@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import http from 'http';
 import routes from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { cacheService } from "./services/caching";
@@ -127,7 +128,7 @@ async function registerResilienceTests() {
     // Teste para Google TTS
     resilienceService.registerTest("google_tts", async () => {
       try {
-        const ttsService = new GoogleTTSService(process.env.GOOGLE_TTS_API_KEY || "");
+        const ttsService = new GoogleCloudTTSService(process.env.GOOGLE_TTS_API_KEY || "");
         const startTime = Date.now();
         const result = await ttsService.getVoices("pt-BR");
         const endTime = Date.now();
@@ -337,7 +338,9 @@ async function registerResilienceTests() {
   
   // Iniciar a aplicação
   app.use(routes);
-  const server = app.listen();
+  
+  // Criar o servidor HTTP
+  const server = http.createServer(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

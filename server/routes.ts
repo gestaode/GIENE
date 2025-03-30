@@ -8,6 +8,7 @@
 import { Router } from 'express';
 import contentApiRoutes from './routes/content-api';
 import freeToolsApiRoutes from './routes/free-tools-api';
+import tiktokTrendsApiRoutes from './routes/tiktok-trends-api';
 
 // Prefixo padrão para APIs
 const API_PREFIX = '/api';
@@ -31,6 +32,7 @@ router.get(`${API_PREFIX}/health`, (req, res) => {
 // Configurar rotas para cada módulo da API
 router.use(`${API_PREFIX}/content`, contentApiRoutes);
 router.use(`${API_PREFIX}/free-tools`, freeToolsApiRoutes);
+router.use(`${API_PREFIX}/tiktok-trends`, tiktokTrendsApiRoutes);
 // TODO: Adicionar outras rotas à medida que forem implementadas
 // router.use(`${API_PREFIX}/video`, videoApiRoutes);
 // router.use(`${API_PREFIX}/social-media`, socialMediaApiRoutes);

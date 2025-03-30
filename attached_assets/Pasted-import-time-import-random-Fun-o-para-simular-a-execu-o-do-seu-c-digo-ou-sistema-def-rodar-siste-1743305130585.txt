@@ -1,0 +1,64 @@
+import time
+import random
+
+# Função para simular a execução do seu código ou sistema
+def rodar_sistema():
+    try:
+        # Simulação do código que você quer rodar
+        # Aqui você pode chamar o código ou função que deseja testar
+        print("Executando o sistema...")
+        
+        # Simula aleatoriamente um erro com uma probabilidade de 10%
+        if random.random() < 0.1:  # 10% de chance de erro
+            raise ValueError("Erro detectado na execução do sistema.")
+        
+        # Se o código foi executado com sucesso, retorna True
+        return True
+
+    except Exception as e:
+        print(f"Erro detectado: {e}")
+        
+        # Aqui você pode adicionar lógica para tentar corrigir o erro
+        corrigir_erro(e)  # Função que tentará corrigir o erro
+        return False
+
+# Função de correção de erro
+def corrigir_erro(erro):
+    print("Tentando corrigir o erro...")
+    # Lógica para corrigir o erro vai aqui
+    # Exemplo: se for erro de conexão, tentar reconectar
+    # Para simulação, fazemos uma pausa antes de tentar novamente
+    time.sleep(2)
+    print("Erro corrigido. Reiniciando execução...")
+
+# Função para realizar a varredura e executar o código múltiplas vezes
+def realizar_varredura(repeticoes=1000):
+    execucoes_sucesso = 0
+    execucoes_falha = 0
+    tentativas = 0
+
+    while execucoes_sucesso < repeticoes:
+        print(f"Execução {tentativas+1}/{repeticoes}")
+        tentativas += 1
+        
+        if rodar_sistema():
+            execucoes_sucesso += 1
+        else:
+            execucoes_falha += 1
+            execucoes_sucesso = 0  # Reinicia a contagem de execuções bem-sucedidas
+        
+        # Verificação de quantidade de falhas
+        if execucoes_falha > 100:
+            print("Muitas falhas consecutivas. Ajuste o código e tente novamente.")
+            break
+
+        # Pausa para não sobrecarregar o sistema
+        time.sleep(1)
+
+    if execucoes_sucesso == repeticoes:
+        print(f"Parabéns! O sistema foi executado com sucesso {repeticoes} vezes seguidas.")
+    else:
+        print(f"O processo foi interrompido após {tentativas} tentativas. Falhas: {execucoes_falha}")
+
+# Iniciar o processo de execução e varredura
+realizar_varredura(1000)
