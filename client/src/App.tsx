@@ -6,6 +6,8 @@ import NotFound from "@/pages/not-found";
 import { Sidebar } from "@/components/layout/sidebar";
 import Dashboard from "@/pages/dashboard";
 import CreateVideo from "@/pages/create-video";
+import EditVideo from "@/pages/edit-video";
+import SchedulePost from "@/pages/schedule-post";
 import Library from "@/pages/library";
 import Schedule from "@/pages/schedule";
 import Leads from "@/pages/leads";
@@ -39,6 +41,20 @@ function Router() {
         {() => (
           <MainLayout>
             <CreateVideo />
+          </MainLayout>
+        )}
+      </Route>
+      <Route path="/edit-video/:id">
+        {({ id }) => (
+          <MainLayout>
+            <EditVideo id={id} />
+          </MainLayout>
+        )}
+      </Route>
+      <Route path="/schedule-post/:id">
+        {({ id }) => (
+          <MainLayout>
+            <SchedulePost id={id} />
           </MainLayout>
         )}
       </Route>
