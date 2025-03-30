@@ -14,7 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
-type ApiServiceType = "pexels" | "google_tts" | "openai" | "ffmpeg";
+type ApiServiceType = "pexels" | "google_tts" | "openai" | "ffmpeg" | "mistral" | "huggingface" | "tts_service";
 
 export interface ApiServiceStatus {
   id?: number;
@@ -27,9 +27,16 @@ export interface ApiServiceStatus {
 export function ApiStatus() {
   const { toast } = useToast();
   
-  const { data: apiSettings, isLoading, error } = useQuery({
+  const { data: apiSettings, isLoading: settingsLoading, error: settingsError } = useQuery({
     queryKey: ["/api/settings"],
   });
+  
+  const { data: serviceStatus, isLoading: statusLoading, error: statusError } = useQuery({
+    queryKey: ["/api/settings/services/status"],
+  });
+  
+  const isLoading = settingsLoading || statusLoading;
+  const hasError = settingsError || statusError;
   
   // Fetch service statuses from API settings
   const apiServices: ApiServiceStatus[] = [
@@ -52,6 +59,18 @@ export function ApiStatus() {
       icon: <Bot size={18} />,
     },
     {
+      service: "mistral",
+      name: "Mistral AI",
+      status: getApiStatus("mistral"),
+      icon: <Bot size={18} />,
+    },
+    {
+      service: "huggingface",
+      name: "HuggingFace",
+      status: getApiStatus("huggingface"),
+      icon: <Bot size={18} />,
+    },
+    {
       service: "ffmpeg",
       name: "FFmpeg",
       status: "connected", // For demo purposes we'll assume FFmpeg is installed
@@ -61,8 +80,17 @@ export function ApiStatus() {
 
   // Helper function to get API status from settings
   function getApiStatus(service: ApiServiceType): "connected" | "error" | "not_configured" {
-    if (isLoading || error) return "not_configured";
+    if (isLoading || hasError) return "not_configured";
     
+    // First check API service status
+    if (serviceStatus && serviceStatus.services) {
+      const serviceItem = serviceStatus.services.find((s: any) => s.name === service);
+      if (serviceItem && serviceItem.status === 'connected') {
+        return "connected";
+      }
+    }
+    
+    // Then check configured settings
     const setting = apiSettings?.find((s: any) => s.service === service);
     if (!setting) return "not_configured";
     
@@ -122,7 +150,7 @@ export function ApiStatus() {
     );
   }
 
-  if (error) {
+  if (hasError) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
