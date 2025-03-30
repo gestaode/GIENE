@@ -102,7 +102,7 @@ export default function SchedulePost({ id }: SchedulePostProps) {
       setDescription(video.description || "");
       
       if (video.tags && Array.isArray(video.tags)) {
-        setHashtags(video.tags.map(tag => tag.startsWith('#') ? tag : `#${tag}`));
+        setHashtags(video.tags.map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`));
       }
     }
   }, [video]);
