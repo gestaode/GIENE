@@ -39,6 +39,9 @@ import { ElevenLabsService } from "./services/elevenlabs";
 import { AIOrchestrator } from "./services/AIOrchestrator";
 import { cacheService } from "./services/caching";
 import { socialMediaOrchestrator } from "./services/social-media-orchestrator";
+import { exportService } from "./services/export-service";
+import { emailMarketingService } from "./services/email-marketing-service";
+import { resilienceService } from "./services/resilience-service";
 
 // Setup file storage paths
 const __filename = fileURLToPath(import.meta.url);
@@ -2016,5 +2019,538 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 10. Exportação de código e dados
+  app.post("/api/export", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const { type, format } = req.body;
+      
+      if (!type || !format) {
+        return res.status(400).json({ message: "Type and format are required" });
+      }
+      
+      // Validar tipo e formato
+      const validTypes = ["code", "videos", "data"];
+      const validFormats = ["zip", "csv", "json"];
+      
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({ message: "Invalid export type. Must be one of: " + validTypes.join(", ") });
+      }
+      
+      if (!validFormats.includes(format)) {
+        return res.status(400).json({ message: "Invalid export format. Must be one of: " + validFormats.join(", ") });
+      }
+      
+      // Criar job de exportação
+      const job = await exportService.createExportJob(userId, type, format);
+      
+      res.status(202).json({ 
+        message: "Export job created successfully", 
+        job 
+      });
+    } catch (error) {
+      return errorResponse(res, 500, "Error creating export job", error);
+    }
+  });
+  
+  app.get("/api/export/jobs", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const jobs = await storage.getExportJobs(userId);
+      
+      res.status(200).json(jobs);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching export jobs", error);
+    }
+  });
+  
+  app.get("/api/export/jobs/:id", async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job = await storage.getExportJob(jobId);
+      
+      if (!job) {
+        return res.status(404).json({ message: "Export job not found" });
+      }
+      
+      res.status(200).json(job);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching export job", error);
+    }
+  });
+  
+  app.get("/api/export/download/:id", async (req: Request, res: Response) => {
+    try {
+      const jobId = parseInt(req.params.id);
+      const job = await storage.getExportJob(jobId);
+      
+      if (!job) {
+        return res.status(404).json({ message: "Export job not found" });
+      }
+      
+      if (job.status !== "completed") {
+        return res.status(400).json({ message: `Export job is not ready for download (status: ${job.status})` });
+      }
+      
+      if (!job.filePath) {
+        return res.status(400).json({ message: "Export file path is not available" });
+      }
+      
+      // Verificar se o arquivo existe
+      if (!fs.existsSync(job.filePath)) {
+        return res.status(404).json({ message: "Export file not found" });
+      }
+      
+      const fileName = path.basename(job.filePath);
+      
+      // Definir headers para download
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      res.setHeader("Content-Type", "application/octet-stream");
+      
+      // Enviar o arquivo como stream
+      const fileStream = exportService.getExportFileStream(job.filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      return errorResponse(res, 500, "Error downloading export file", error);
+    }
+  });
+  
+  // 11. Funil de vendas e automação de email
+  // 11.1 Email Campaigns
+  app.get("/api/email-campaigns", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const campaigns = await storage.getEmailCampaigns(userId);
+      
+      res.status(200).json(campaigns);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching email campaigns", error);
+    }
+  });
+  
+  app.get("/api/email-campaigns/:id", async (req: Request, res: Response) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      const campaign = await storage.getEmailCampaign(campaignId);
+      
+      if (!campaign) {
+        return res.status(404).json({ message: "Email campaign not found" });
+      }
+      
+      res.status(200).json(campaign);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching email campaign", error);
+    }
+  });
+  
+  app.post("/api/email-campaigns", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const data = { ...req.body, userId, status: "draft" };
+      
+      // Validação básica
+      if (!data.name || !data.subject || !data.body || !data.fromEmail || !data.fromName) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["name", "subject", "body", "fromEmail", "fromName"] 
+        });
+      }
+      
+      // Criar campanha
+      const campaign = await storage.createEmailCampaign(data);
+      
+      res.status(201).json(campaign);
+    } catch (error) {
+      return errorResponse(res, 500, "Error creating email campaign", error);
+    }
+  });
+  
+  app.put("/api/email-campaigns/:id", async (req: Request, res: Response) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      const campaign = await storage.getEmailCampaign(campaignId);
+      
+      if (!campaign) {
+        return res.status(404).json({ message: "Email campaign not found" });
+      }
+      
+      // Verificar se a campanha pode ser editada
+      if (campaign.status !== "draft") {
+        return res.status(400).json({ 
+          message: `Campaign cannot be edited. Current status: ${campaign.status}` 
+        });
+      }
+      
+      // Atualizar campanha
+      const updated = await storage.updateEmailCampaign(campaignId, req.body);
+      
+      res.status(200).json(updated);
+    } catch (error) {
+      return errorResponse(res, 500, "Error updating email campaign", error);
+    }
+  });
+  
+  app.delete("/api/email-campaigns/:id", async (req: Request, res: Response) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      const success = await storage.deleteEmailCampaign(campaignId);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Email campaign not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      return errorResponse(res, 500, "Error deleting email campaign", error);
+    }
+  });
+  
+  app.post("/api/email-campaigns/:id/send", async (req: Request, res: Response) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      
+      // Enviar campanha imediatamente
+      const updatedCampaign = await emailMarketingService.sendCampaignNow(campaignId);
+      
+      res.status(202).json({ 
+        message: "Email campaign sending started", 
+        campaign: updatedCampaign 
+      });
+    } catch (error) {
+      return errorResponse(res, 500, "Error sending email campaign", error);
+    }
+  });
+  
+  app.post("/api/email-campaigns/:id/schedule", async (req: Request, res: Response) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      const { scheduledAt } = req.body;
+      
+      if (!scheduledAt) {
+        return res.status(400).json({ message: "scheduledAt date is required" });
+      }
+      
+      // Agendar campanha
+      const scheduledDate = new Date(scheduledAt);
+      const updatedCampaign = await emailMarketingService.scheduleCampaign(campaignId, scheduledDate);
+      
+      res.status(200).json({ 
+        message: "Email campaign scheduled", 
+        campaign: updatedCampaign 
+      });
+    } catch (error) {
+      return errorResponse(res, 500, "Error scheduling email campaign", error);
+    }
+  });
+  
+  app.post("/api/email-campaigns/:id/cancel", async (req: Request, res: Response) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      
+      // Cancelar agendamento
+      const updatedCampaign = await emailMarketingService.cancelCampaign(campaignId);
+      
+      res.status(200).json({ 
+        message: "Email campaign schedule cancelled", 
+        campaign: updatedCampaign 
+      });
+    } catch (error) {
+      return errorResponse(res, 500, "Error cancelling email campaign", error);
+    }
+  });
+  
+  app.post("/api/email-campaigns/test-email", async (req: Request, res: Response) => {
+    try {
+      const { to, subject, body, fromName, fromEmail } = req.body;
+      
+      if (!to || !subject || !body || !fromName || !fromEmail) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["to", "subject", "body", "fromName", "fromEmail"] 
+        });
+      }
+      
+      // Enviar email de teste
+      const result = await emailMarketingService.testSendEmail(
+        to, fromName, fromEmail, subject, body
+      );
+      
+      if (result.success) {
+        return res.status(200).json({ 
+          message: "Test email sent successfully", 
+          provider: result.provider 
+        });
+      } else {
+        return res.status(500).json({ 
+          message: "Failed to send test email", 
+          error: result.error 
+        });
+      }
+    } catch (error) {
+      return errorResponse(res, 500, "Error sending test email", error);
+    }
+  });
+  
+  // 11.2 Email Templates
+  app.get("/api/email-templates", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const templates = await storage.getEmailTemplates(userId);
+      
+      res.status(200).json(templates);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching email templates", error);
+    }
+  });
+  
+  app.post("/api/email-templates", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const data = { ...req.body, userId };
+      
+      // Validação básica
+      if (!data.name || !data.content) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["name", "content"] 
+        });
+      }
+      
+      // Criar template
+      const template = await storage.createEmailTemplate(data);
+      
+      res.status(201).json(template);
+    } catch (error) {
+      return errorResponse(res, 500, "Error creating email template", error);
+    }
+  });
+  
+  // 11.3 Audience Segments
+  app.get("/api/audience-segments", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const segments = await storage.getAudienceSegments(userId);
+      
+      res.status(200).json(segments);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching audience segments", error);
+    }
+  });
+  
+  app.post("/api/audience-segments", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const data = { ...req.body, userId };
+      
+      // Validação básica
+      if (!data.name || !data.criteria) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["name", "criteria"] 
+        });
+      }
+      
+      // Criar segmento
+      const segment = await storage.createAudienceSegment(data);
+      
+      res.status(201).json(segment);
+    } catch (error) {
+      return errorResponse(res, 500, "Error creating audience segment", error);
+    }
+  });
+  
+  // 11.4 Sales Funnels
+  app.get("/api/sales-funnels", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const funnels = await storage.getSalesFunnels(userId);
+      
+      res.status(200).json(funnels);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching sales funnels", error);
+    }
+  });
+  
+  app.post("/api/sales-funnels", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const data = { ...req.body, userId, status: "active" };
+      
+      // Validação básica
+      if (!data.name || !data.steps) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["name", "steps"] 
+        });
+      }
+      
+      // Criar funil
+      const funnel = await storage.createSalesFunnel(data);
+      
+      res.status(201).json(funnel);
+    } catch (error) {
+      return errorResponse(res, 500, "Error creating sales funnel", error);
+    }
+  });
+  
+  // 11.5 Landing Pages
+  app.get("/api/landing-pages", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const pages = await storage.getLandingPages(userId);
+      
+      res.status(200).json(pages);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching landing pages", error);
+    }
+  });
+  
+  app.post("/api/landing-pages", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const data = { ...req.body, userId, status: "draft" };
+      
+      // Validação básica
+      if (!data.title || !data.content || !data.slug) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["title", "content", "slug"] 
+        });
+      }
+      
+      // Verificar se o slug já existe
+      const existingPage = await storage.getLandingPageBySlug(data.slug);
+      if (existingPage) {
+        return res.status(400).json({ message: "Slug already in use" });
+      }
+      
+      // Criar página
+      const page = await storage.createLandingPage(data);
+      
+      res.status(201).json(page);
+    } catch (error) {
+      return errorResponse(res, 500, "Error creating landing page", error);
+    }
+  });
+  
+  // 11.6 Payments
+  app.get("/api/payments", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const payments = await storage.getPayments(userId);
+      
+      res.status(200).json(payments);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching payments", error);
+    }
+  });
+  
+  app.post("/api/payments", async (req: Request, res: Response) => {
+    try {
+      const userId = 1; // Demo userId
+      const data = { 
+        ...req.body, 
+        userId, 
+        status: "pending",
+        provider: req.body.provider || "manual"
+      };
+      
+      // Validação básica
+      if (!data.leadId || !data.amount) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["leadId", "amount"] 
+        });
+      }
+      
+      // Criar pagamento
+      const payment = await storage.createPayment(data);
+      
+      res.status(201).json(payment);
+    } catch (error) {
+      return errorResponse(res, 500, "Error creating payment", error);
+    }
+  });
+  
+  // 12. Testes de resiliência e monitoramento
+  app.get("/api/resilience/tests", async (req: Request, res: Response) => {
+    try {
+      const service = req.query.service as string;
+      let tests;
+      
+      if (service) {
+        tests = await storage.getResilienceTestsByService(service);
+      } else {
+        tests = await storage.getResilienceTests();
+      }
+      
+      res.status(200).json(tests);
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching resilience tests", error);
+    }
+  });
+  
+  app.post("/api/resilience/tests/run", async (req: Request, res: Response) => {
+    try {
+      const { service, options } = req.body;
+      
+      if (!service) {
+        return res.status(400).json({ message: "Service name is required" });
+      }
+      
+      // Executar teste
+      await resilienceService.runTest(service, options);
+      
+      res.status(202).json({ message: "Resilience test started" });
+    } catch (error) {
+      return errorResponse(res, 500, "Error running resilience test", error);
+    }
+  });
+  
+  app.get("/api/resilience/statistics", async (req: Request, res: Response) => {
+    try {
+      const service = req.query.service as string;
+      
+      if (service) {
+        const stats = await resilienceService.getServiceStatistics(service);
+        res.status(200).json(stats);
+      } else {
+        const stats = await resilienceService.getSystemStatistics();
+        res.status(200).json(stats);
+      }
+    } catch (error) {
+      return errorResponse(res, 500, "Error fetching resilience statistics", error);
+    }
+  });
+  
+  app.post("/api/resilience/test-register", async (req: Request, res: Response) => {
+    try {
+      const { name, service, result, functionTested, fallbackUsed, fallbackService, responseTime, errorMessage } = req.body;
+      
+      if (!name || !service || !result || !functionTested) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["name", "service", "result", "functionTested"] 
+        });
+      }
+      
+      // Registrar teste manualmente
+      const test = await storage.createResilienceTest({
+        name,
+        service,
+        result,
+        functionTested,
+        fallbackUsed: fallbackUsed || false,
+        fallbackService: fallbackService || null,
+        responseTime: responseTime || null,
+        errorMessage: errorMessage || null
+      });
+      
+      res.status(201).json(test);
+    } catch (error) {
+      return errorResponse(res, 500, "Error registering resilience test", error);
+    }
+  });
+  
   return httpServer;
 }

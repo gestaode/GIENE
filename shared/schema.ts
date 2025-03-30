@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json, date, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -156,3 +156,217 @@ export const voices = pgTable("voices", {
 export const insertVoiceSchema = createInsertSchema(voices);
 export type InsertVoice = z.infer<typeof insertVoiceSchema>;
 export type Voice = typeof voices.$inferSelect;
+
+// Email Marketing Schema
+export const emailCampaigns = pgTable("email_campaigns", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  fromEmail: text("from_email").notNull(),
+  fromName: text("from_name").notNull(),
+  status: text("status").notNull().default("draft"), // draft, scheduled, sending, sent, failed
+  scheduledAt: timestamp("scheduled_at"),
+  sentAt: timestamp("sent_at"),
+  segmentId: integer("segment_id"), // Link to audience segment
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  stats: json("stats"), // open_rate, click_rate, etc.
+});
+
+export const emailTemplates = pgTable("email_templates", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  category: text("category").notNull(), // welcome, follow-up, promotion, etc.
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const audienceSegments = pgTable("audience_segments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  criteria: json("criteria").notNull(), // JSON with filter criteria
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Sales Funnel Schema
+export const salesFunnels = pgTable("sales_funnels", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("active"), // active, paused, archived
+  steps: json("steps").notNull(), // JSON with funnel steps
+  conversionRate: decimal("conversion_rate").default("0"),
+  revenue: decimal("revenue").default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const landingPages = pgTable("landing_pages", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  funnelId: integer("funnel_id"),
+  title: text("title").notNull(),
+  slug: text("slug").notNull(),
+  content: json("content").notNull(), // JSON with page content
+  styles: json("styles"), // JSON with custom CSS
+  settings: json("settings"), // JSON with page settings
+  status: text("status").notNull().default("draft"), // draft, published, archived
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  views: integer("views").default(0),
+  conversions: integer("conversions").default(0),
+});
+
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  leadId: integer("lead_id").notNull(),
+  funnelId: integer("funnel_id"),
+  amount: decimal("amount").notNull(),
+  currency: text("currency").notNull().default("BRL"),
+  status: text("status").notNull(), // pending, completed, failed, refunded
+  provider: text("provider").notNull(), // stripe, paypal, mercadopago, etc.
+  providerPaymentId: text("provider_payment_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// System Export Schema
+export const exportJobs = pgTable("export_jobs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  type: text("type").notNull(), // code, data, videos, etc.
+  format: text("format").notNull(), // csv, zip, json, etc.
+  status: text("status").notNull().default("pending"), // pending, processing, completed, failed
+  filePath: text("file_path"),
+  fileSize: integer("file_size"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  error: text("error"),
+});
+
+// Test Results Schema
+export const resilienceTests = pgTable("resilience_tests", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  service: text("service").notNull(), // AI, video, TTS, social, etc.
+  functionTested: text("function_tested").notNull(),
+  result: text("result").notNull(), // passed, failed, partial
+  fallbackUsed: boolean("fallback_used").default(false),
+  fallbackService: text("fallback_service"),
+  responseTime: integer("response_time"), // in ms
+  errorMessage: text("error_message"),
+  date: timestamp("date").defaultNow(),
+});
+
+// Insert schemas for new tables
+export const insertEmailCampaignSchema = createInsertSchema(emailCampaigns).pick({
+  userId: true,
+  name: true,
+  subject: true,
+  body: true,
+  fromEmail: true,
+  fromName: true,
+  status: true,
+  scheduledAt: true,
+  segmentId: true,
+});
+
+export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).pick({
+  userId: true,
+  name: true,
+  subject: true,
+  body: true,
+  category: true,
+});
+
+export const insertAudienceSegmentSchema = createInsertSchema(audienceSegments).pick({
+  userId: true,
+  name: true,
+  description: true,
+  criteria: true,
+});
+
+export const insertSalesFunnelSchema = createInsertSchema(salesFunnels).pick({
+  userId: true,
+  name: true,
+  description: true,
+  status: true,
+  steps: true,
+});
+
+export const insertLandingPageSchema = createInsertSchema(landingPages).pick({
+  userId: true,
+  funnelId: true,
+  title: true,
+  slug: true,
+  content: true,
+  styles: true,
+  settings: true,
+  status: true,
+});
+
+export const insertPaymentSchema = createInsertSchema(payments).pick({
+  userId: true,
+  leadId: true,
+  funnelId: true,
+  amount: true,
+  currency: true,
+  status: true,
+  provider: true,
+  providerPaymentId: true,
+});
+
+export const insertExportJobSchema = createInsertSchema(exportJobs).pick({
+  userId: true,
+  type: true,
+  format: true,
+  status: true,
+  filePath: true,
+  fileSize: true,
+});
+
+export const insertResilienceTestSchema = createInsertSchema(resilienceTests).pick({
+  name: true,
+  service: true,
+  functionTested: true,
+  result: true,
+  fallbackUsed: true,
+  fallbackService: true,
+  responseTime: true,
+  errorMessage: true,
+});
+
+// Types for new schemas
+export type InsertEmailCampaign = z.infer<typeof insertEmailCampaignSchema>;
+export type EmailCampaign = typeof emailCampaigns.$inferSelect;
+
+export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+
+export type InsertAudienceSegment = z.infer<typeof insertAudienceSegmentSchema>;
+export type AudienceSegment = typeof audienceSegments.$inferSelect;
+
+export type InsertSalesFunnel = z.infer<typeof insertSalesFunnelSchema>;
+export type SalesFunnel = typeof salesFunnels.$inferSelect;
+
+export type InsertLandingPage = z.infer<typeof insertLandingPageSchema>;
+export type LandingPage = typeof landingPages.$inferSelect;
+
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Payment = typeof payments.$inferSelect;
+
+export type InsertExportJob = z.infer<typeof insertExportJobSchema>;
+export type ExportJob = typeof exportJobs.$inferSelect;
+
+export type InsertResilienceTest = z.infer<typeof insertResilienceTestSchema>;
+export type ResilienceTest = typeof resilienceTests.$inferSelect;
